@@ -32,7 +32,7 @@
       {
         "id": "budget-personal-daily-hard",
         "virtual_key_id": "vk-personal",
-        "max_limit": 20.0,
+        "max_limit": 10.0,
         "reset_duration": "1d",
         "calendar_aligned": true
       }
