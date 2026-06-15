@@ -37,6 +37,12 @@ logs/
 *.log
 npm-debug.log*
 
+# Release artifacts
+release/*.app/
+release/*.zip
+release/*.sha256
+release/*.dmg
+
 # Test coverage
 coverage/
 playwright-report/
