@@ -30,6 +30,7 @@ launchd/com.local.ai-budget-manager...     macOS launchd template
 scripts/bifrost-compose.sh                 Compose helper
 scripts/install-launchd.sh                 Install macOS LaunchAgent
 scripts/uninstall-launchd.sh               Remove macOS LaunchAgent
+macos/BifrostBudgetBar                     Swift macOS menu bar budget app
 ```
 
 Runtime state is written under `./bifrost` as SQLite files. Those database files
@@ -70,14 +71,14 @@ scripts/bifrost-compose.sh down
 Bifrost listens on:
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:18080
 ```
 
 Change the bind address or port in `.env`:
 
 ```dotenv
 BIFROST_BIND_HOST=127.0.0.1
-BIFROST_PORT=8080
+BIFROST_PORT=18080
 ```
 
 ## Start with Nix
@@ -200,6 +201,69 @@ Bifrost uses `config_store` with SQLite. If you edit entities in
 `bifrost/config.json`, Bifrost reconciles those changes into the local database
 on startup. UI/API-only changes are stored in `bifrost/config.db`.
 
+## macOS Menu Bar Budget App
+
+`macos/BifrostBudgetBar` is a small Swift/AppKit status bar app. It polls the
+local Bifrost governance API, shows budget progress in the menu bar, and exposes
+budget controls from the click menu:
+
+- login startup toggle through a LaunchAgent
+- automatic reset schedule: off, daily, weekly, monthly, or cron
+- manual reset now
+- raise budget by a saved default amount
+- raise budget by any custom dollar amount
+- edit the default raise amount
+- choose exactly one displayed budget from registered common/vendor budgets
+- set a common default budget that applies to the whole Virtual Key
+- add or update vendor-specific budgets for any provider configured on the Virtual Key
+- edit Bifrost URL, Virtual Key ID, Budget ID, and reset duration
+
+Run it directly:
+
+```bash
+swift run --package-path macos/BifrostBudgetBar BifrostBudgetBar -- \
+  --base-url http://127.0.0.1:18080 \
+  --vk-id vk-personal \
+  --budget-id budget-personal-daily-hard
+```
+
+For a monthly Claude Code Virtual Key, point the app at that key and budget:
+
+```bash
+BIFROST_VIRTUAL_KEY_ID=vk-claude-code \
+BIFROST_BUDGET_ID=budget-claude-code-monthly \
+swift run --package-path macos/BifrostBudgetBar BifrostBudgetBar
+```
+
+The app also accepts:
+
+```text
+BIFROST_BASE_URL              default: http://127.0.0.1:18080
+BIFROST_VIRTUAL_KEY_ID        default: vk-personal
+BIFROST_BUDGET_ID             optional; selects one budget by id
+BIFROST_BUDGET_RESET_DURATION optional; selects a budget by reset duration
+BIFROST_REFRESH_SECONDS       default: 60
+BIFROST_ADMIN_TOKEN           optional bearer token if your Bifrost admin API requires it
+```
+
+Daily, weekly, monthly, and cron resets are evaluated by the running app against
+the macOS system clock. Weekly means Monday 00:00. Monthly means day 1 00:00.
+Cron uses five fields: `minute hour day month weekday`, for example:
+
+```text
+0 0 1 * *
+```
+
+Vendor budgets are read from Bifrost `provider_configs[].budgets`, so the app is
+not hardcoded to Anthropic or OpenAI. Any provider/vendor that Bifrost returns on
+the selected Virtual Key can receive a vendor-specific budget. The displayed
+budget menu intentionally lists only budgets that already exist, so budgetless
+vendors do not create a long list of zero rows. Use `Add Vendor Budget` to create
+one explicitly. `Set Common Default Budget` edits the Virtual Key level budget,
+which applies across all providers on that key.
+
+The app's `Launch at Login` menu item writes or removes its own LaunchAgent.
+
 ## Test request
 
 Use the personal Virtual Key from `.env`:
@@ -207,7 +271,7 @@ Use the personal Virtual Key from `.env`:
 ```bash
 source .env
 
-curl -X POST "http://127.0.0.1:8080/v1/chat/completions" \
+curl -X POST "http://127.0.0.1:18080/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -H "x-bf-vk: $BIFROST_VK_PERSONAL" \
   -d '{
@@ -221,7 +285,7 @@ curl -X POST "http://127.0.0.1:8080/v1/chat/completions" \
 For OpenAI-compatible clients, point the base URL to:
 
 ```text
-http://127.0.0.1:8080/v1
+http://127.0.0.1:18080/v1
 ```
 
 Use `BIFROST_VK_PERSONAL` as the client API key if your client sends
@@ -274,7 +338,7 @@ App / Agent -> Headroom -> Bifrost -> Provider
 Configure Headroom's upstream OpenAI-compatible base URL as:
 
 ```text
-http://127.0.0.1:8080/v1
+http://127.0.0.1:18080/v1
 ```
 
 Make sure Headroom preserves the Bifrost governance credential, either as
