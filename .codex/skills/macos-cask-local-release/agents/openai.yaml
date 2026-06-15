@@ -1,0 +1,4 @@
+interface:
+  display_name: "macOS Cask Local Release"
+  short_description: "Local keychain macOS Cask release flow"
+  default_prompt: "Use $macos-cask-local-release to publish a macOS Homebrew Cask release with local signing credentials."

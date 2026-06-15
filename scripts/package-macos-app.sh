@@ -63,7 +63,6 @@ release_dir="$repo_root/release"
 app_path="$release_dir/bifrost-gage.app"
 zip_path="$release_dir/bifrost-gage_${version}_aarch64.app.zip"
 sha_path="$zip_path.sha256"
-executable_path="$repo_root/.build/release/bifrost-gage"
 icon_path="$repo_root/Resources/AppIcon.icns"
 required_swift_version="6.3.2"
 developer_dir="${BIFROST_GAGE_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -88,8 +87,11 @@ rm -rf "$app_path" "$zip_path" "$sha_path"
 mkdir -p "$release_dir"
 
 DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" "$swift_bin" build -c release
+build_bin_dir="$(DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" "$swift_bin" build -c release --show-bin-path | tail -n 1)"
+executable_path="$build_bin_dir/bifrost-gage"
 
 test -x "$executable_path"
+test -f "$icon_path"
 
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
 cp "$executable_path" "$app_path/Contents/MacOS/bifrost-gage"
