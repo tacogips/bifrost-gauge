@@ -1,0 +1,11 @@
+.env
+.direnv/
+result
+result-*
+
+# Bifrost persists runtime state beside config.json in its app-dir.
+bifrost/*.db
+bifrost/*.db-*
+bifrost/*.sqlite
+bifrost/*.sqlite-*
+bifrost/logs/

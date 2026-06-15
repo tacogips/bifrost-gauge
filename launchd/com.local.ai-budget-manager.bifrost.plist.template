@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.ai-budget-manager.bifrost</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd "__REPO_ROOT__" &amp;&amp; "__NIX_BIN__" develop "__REPO_ROOT__" --command "__REPO_ROOT__/scripts/bifrost-compose.sh" up</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>300</integer>
+
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/bifrost-launchd.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/bifrost-launchd.err.log</string>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO_ROOT__</string>
+</dict>
+</plist>
