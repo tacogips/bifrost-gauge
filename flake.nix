@@ -2,10 +2,11 @@
   description = "Local Bifrost configuration for personal AI budget management";
 
   inputs = {
+    ccusage.url = "github:ryoppippi/ccusage";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, ccusage, nixpkgs }:
     let
       systems = [
         "aarch64-darwin"
@@ -15,23 +16,12 @@
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
       mkPkgs = system: import nixpkgs { inherit system; };
-      mkCcusage = pkgs: pkgs.writeShellApplication {
-        name = "ccusage";
-        runtimeInputs = with pkgs; [
-          nodejs
-        ];
-        text = ''
-          set -euo pipefail
-
-          exec npx --yes ccusage@latest "$@"
-        '';
-      };
+      ccusagePackage = system: ccusage.packages.${system}.default;
     in
     {
       devShells = forAllSystems (system:
         let
           pkgs = mkPkgs system;
-          ccusage = mkCcusage pkgs;
         in
         {
           default = pkgs.mkShell {
@@ -43,8 +33,7 @@
               pkgs.gitMinimal
               pkgs.go-task
               pkgs.jq
-              pkgs.nodejs
-              ccusage
+              (ccusagePackage system)
             ];
 
             shellHook = ''
@@ -59,7 +48,7 @@
       apps = forAllSystems (system:
         let
           pkgs = mkPkgs system;
-          ccusage = mkCcusage pkgs;
+          ccusageBin = ccusagePackage system;
           bifrost = pkgs.writeShellApplication {
             name = "bifrost";
             runtimeInputs = with pkgs; [
@@ -88,7 +77,7 @@
           };
           ccusage = {
             type = "app";
-            program = "${ccusage}/bin/ccusage";
+            program = "${ccusageBin}/bin/ccusage";
           };
         });
     };

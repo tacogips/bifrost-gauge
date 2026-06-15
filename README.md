@@ -82,8 +82,7 @@ BIFROST_PORT=8080
 
 ## Start with Nix
 
-Enter a shell with Docker client, Docker Compose, go-task, jq, Node.js, and a
-`ccusage` wrapper:
+Enter a shell with Docker client, Docker Compose, go-task, jq, and `ccusage`:
 
 ```bash
 nix develop
@@ -155,10 +154,11 @@ task ccusage:claude:daily -- --mode display
 task ccusage:codex:daily -- --speed fast
 ```
 
-The `ccusage` command provided by this flake delegates to:
+The `ccusage` command is installed from the `ryoppippi/ccusage` flake input.
+It can also be called directly with:
 
 ```bash
-npx --yes ccusage@latest
+nix run .#ccusage -- daily
 ```
 
 ## Bifrost governance
