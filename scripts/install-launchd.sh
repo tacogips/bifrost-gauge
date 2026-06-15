@@ -11,11 +11,17 @@ label="com.local.ai-budget-manager.bifrost"
 template="$repo_root/launchd/$label.plist.template"
 launch_agents_dir="$HOME/Library/LaunchAgents"
 log_dir="${BIFROST_LAUNCHD_LOG_DIR:-$HOME/Library/Logs/ai-budget-manager}"
-nix_bin="${NIX_BIN:-$(command -v nix || true)}"
+bifrost_bin="${BIFROST_BIN:-}"
 
-if [ -z "$nix_bin" ]; then
-  echo "Could not find nix. Set NIX_BIN=/absolute/path/to/nix and retry." >&2
-  exit 1
+if [ -z "$bifrost_bin" ]; then
+  nix_bin="${NIX_BIN:-$(command -v nix || true)}"
+  if [ -z "$nix_bin" ]; then
+    echo "Could not find nix. Set NIX_BIN=/absolute/path/to/nix or BIFROST_BIN=/absolute/path/to/bifrost-http and retry." >&2
+    exit 1
+  fi
+
+  "$nix_bin" build --out-link "$repo_root/result-bifrost-http" "$repo_root#bifrost-http"
+  bifrost_bin="$repo_root/result-bifrost-http/bin/bifrost-http"
 fi
 
 mkdir -p "$launch_agents_dir" "$log_dir"
@@ -26,12 +32,12 @@ escape_sed_replacement() {
 }
 
 repo_root_escaped="$(escape_sed_replacement "$repo_root")"
-nix_bin_escaped="$(escape_sed_replacement "$nix_bin")"
+bifrost_bin_escaped="$(escape_sed_replacement "$bifrost_bin")"
 log_dir_escaped="$(escape_sed_replacement "$log_dir")"
 
 sed \
   -e "s/__REPO_ROOT__/$repo_root_escaped/g" \
-  -e "s/__NIX_BIN__/$nix_bin_escaped/g" \
+  -e "s/__BIFROST_BIN__/$bifrost_bin_escaped/g" \
   -e "s/__LOG_DIR__/$log_dir_escaped/g" \
   "$template" > "$plist"
 
@@ -47,8 +53,8 @@ Plist:
   $plist
 
 Logs:
-  $log_dir/bifrost-launchd.out.log
-  $log_dir/bifrost-launchd.err.log
+  $log_dir/bifrost-host-launchd.out.log
+  $log_dir/bifrost-host-launchd.err.log
 
 Status:
   launchctl print gui/$(id -u)/$label

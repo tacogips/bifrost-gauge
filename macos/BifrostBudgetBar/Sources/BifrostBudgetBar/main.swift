@@ -198,6 +198,10 @@ struct VirtualKeyResponse: Decodable {
     }
 }
 
+struct BudgetsResponse: Decodable {
+    let budgets: [Budget]
+}
+
 struct VirtualKey: Decodable {
     let id: String
     let name: String?
@@ -221,6 +225,14 @@ struct VirtualKey: Decodable {
         self.providerConfigs = try container.decodeIfPresent([ProviderConfig].self, forKey: .providerConfigs) ?? []
         self.calendarAligned = try container.decodeIfPresent(Bool.self, forKey: .calendarAligned)
     }
+
+    init(id: String, name: String?, budgets: [Budget], providerConfigs: [ProviderConfig], calendarAligned: Bool?) {
+        self.id = id
+        self.name = name
+        self.budgets = budgets
+        self.providerConfigs = providerConfigs
+        self.calendarAligned = calendarAligned
+    }
 }
 
 struct Budget: Decodable {
@@ -229,6 +241,8 @@ struct Budget: Decodable {
     let currentUsage: Double
     let resetDuration: String
     let lastReset: String?
+    let virtualKeyID: String?
+    let providerConfigID: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -236,6 +250,8 @@ struct Budget: Decodable {
         case currentUsage = "current_usage"
         case resetDuration = "reset_duration"
         case lastReset = "last_reset"
+        case virtualKeyID = "virtual_key_id"
+        case providerConfigID = "provider_config_id"
     }
 }
 
@@ -270,6 +286,26 @@ struct ProviderConfig: Decodable {
         self.allowAllKeys = try container.decodeIfPresent(Bool.self, forKey: .allowAllKeys) ?? false
         self.keys = try container.decodeIfPresent([DBKey].self, forKey: .keys) ?? []
         self.budgets = try container.decodeIfPresent([Budget].self, forKey: .budgets) ?? []
+    }
+
+    init(
+        id: Int?,
+        provider: String,
+        weight: Double?,
+        allowedModels: [String],
+        blacklistedModels: [String],
+        allowAllKeys: Bool,
+        keys: [DBKey],
+        budgets: [Budget]
+    ) {
+        self.id = id
+        self.provider = provider
+        self.weight = weight
+        self.allowedModels = allowedModels
+        self.blacklistedModels = blacklistedModels
+        self.allowAllKeys = allowAllKeys
+        self.keys = keys
+        self.budgets = budgets
     }
 }
 
@@ -408,9 +444,13 @@ final class BifrostClient {
         request.httpMethod = "GET"
         applyHeaders(to: &request)
 
-        session.dataTask(with: request) { [decoder] data, response, error in
+        session.dataTask(with: request) { [weak self, decoder] data, response, error in
             if let error {
                 completion(.failure(error))
+                return
+            }
+            guard let self else {
+                completion(.failure(BudgetBarError.invalidResponse))
                 return
             }
             guard let http = response as? HTTPURLResponse, let data else {
@@ -422,7 +462,15 @@ final class BifrostClient {
                 return
             }
             do {
-                completion(.success(try decoder.decode(VirtualKeyResponse.self, from: data).virtualKey))
+                let virtualKey = try decoder.decode(VirtualKeyResponse.self, from: data).virtualKey
+                self.fetchBudgets { budgetsResult in
+                    switch budgetsResult {
+                    case .success(let budgets):
+                        completion(.success(self.merging(budgets: budgets, into: virtualKey)))
+                    case .failure:
+                        completion(.success(virtualKey))
+                    }
+                }
             } catch {
                 completion(.failure(error))
             }
@@ -629,6 +677,68 @@ final class BifrostClient {
         return left.resetDuration == right.resetDuration
     }
 
+    private func fetchBudgets(completion: @escaping (Result<[Budget], Error>) -> Void) {
+        var request = URLRequest(url: budgetsURL())
+        request.httpMethod = "GET"
+        applyHeaders(to: &request)
+
+        session.dataTask(with: request) { [decoder] data, response, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+            guard let http = response as? HTTPURLResponse, let data else {
+                completion(.failure(BudgetBarError.invalidResponse))
+                return
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                completion(.failure(BudgetBarError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
+                return
+            }
+            do {
+                completion(.success(try decoder.decode(BudgetsResponse.self, from: data).budgets))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    private func merging(budgets: [Budget], into virtualKey: VirtualKey) -> VirtualKey {
+        let commonBudgets = mergedBudgets(
+            existing: virtualKey.budgets,
+            additional: budgets.filter { $0.virtualKeyID == virtualKey.id }
+        )
+        let providerConfigs = virtualKey.providerConfigs.map { providerConfig in
+            let providerBudgets = budgets.filter { $0.providerConfigID == providerConfig.id }
+            return ProviderConfig(
+                id: providerConfig.id,
+                provider: providerConfig.provider,
+                weight: providerConfig.weight,
+                allowedModels: providerConfig.allowedModels,
+                blacklistedModels: providerConfig.blacklistedModels,
+                allowAllKeys: providerConfig.allowAllKeys,
+                keys: providerConfig.keys,
+                budgets: mergedBudgets(existing: providerConfig.budgets, additional: providerBudgets)
+            )
+        }
+        return VirtualKey(
+            id: virtualKey.id,
+            name: virtualKey.name,
+            budgets: commonBudgets,
+            providerConfigs: providerConfigs,
+            calendarAligned: virtualKey.calendarAligned
+        )
+    }
+
+    private func mergedBudgets(existing: [Budget], additional: [Budget]) -> [Budget] {
+        additional.reduce(existing) { partial, budget in
+            if partial.contains(where: { budgetMatches($0, budget) }) {
+                return partial
+            }
+            return partial + [budget]
+        }
+    }
+
     private func virtualKeyURL() -> URL {
         let config = settings.currentConfig()
         return config.baseURL
@@ -636,6 +746,13 @@ final class BifrostClient {
             .appendingPathComponent("governance")
             .appendingPathComponent("virtual-keys")
             .appendingPathComponent(config.virtualKeyID)
+    }
+
+    private func budgetsURL() -> URL {
+        settings.currentConfig().baseURL
+            .appendingPathComponent("api")
+            .appendingPathComponent("governance")
+            .appendingPathComponent("budgets")
     }
 
     private func applyHeaders(to request: inout URLRequest) {

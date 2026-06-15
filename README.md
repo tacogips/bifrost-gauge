@@ -21,13 +21,14 @@ App / Agent
 ## Files
 
 ```text
-docker-compose.yml                         Local Bifrost service
-flake.nix                                  Nix dev shell and nix run wrapper
+docker-compose.yml                         Optional legacy Compose service
+flake.nix                                  Nix-pinned host Bifrost and tools
 Taskfile.yml                               go-task commands for Bifrost and ccusage
 .env.example                               Local environment template
 bifrost/config.json                        Bifrost app-dir config
+bifrost-check/config.json                  Disposable host-run check config
 launchd/com.local.ai-budget-manager...     macOS launchd template
-scripts/bifrost-compose.sh                 Compose helper
+scripts/bifrost-compose.sh                 Optional Compose helper
 scripts/install-launchd.sh                 Install macOS LaunchAgent
 scripts/uninstall-launchd.sh               Remove macOS LaunchAgent
 macos/BifrostBudgetBar                     Swift macOS menu bar budget app
@@ -54,18 +55,10 @@ Generate a local encryption key with:
 openssl rand -base64 32
 ```
 
-## Start with Docker Compose
+## Start with Nix on the Host
 
 ```bash
-docker compose up -d
-```
-
-Or use the helper:
-
-```bash
-scripts/bifrost-compose.sh up
-scripts/bifrost-compose.sh logs
-scripts/bifrost-compose.sh down
+nix run .#bifrost-host
 ```
 
 Bifrost listens on:
@@ -74,28 +67,40 @@ Bifrost listens on:
 http://127.0.0.1:18080
 ```
 
-Change the bind address or port in `.env`:
+Run the disposable check config on a separate port:
+
+```bash
+nix run .#bifrost-check
+```
+
+The check instance listens on:
+
+```text
+http://127.0.0.1:18082
+```
+
+It copies `bifrost-check/config.json` into `.run-bifrost-check` and stores
+temporary SQLite state there. Change bind addresses or ports in `.env`:
 
 ```dotenv
 BIFROST_BIND_HOST=127.0.0.1
 BIFROST_PORT=18080
+BIFROST_CHECK_BIND_HOST=127.0.0.1
+BIFROST_CHECK_PORT=18082
 ```
 
-## Start with Nix
+## Dev Shell
 
-Enter a shell with Docker client, Docker Compose, go-task, jq, and `ccusage`:
+Enter a shell with `bifrost-http`, go-task, jq, and `ccusage`:
 
 ```bash
 nix develop
 ```
 
-Run Bifrost through the flake app:
+Run the pinned Bifrost binary directly:
 
 ```bash
-nix run .#bifrost -- up
-nix run .#bifrost -- logs
-nix run .#bifrost -- restart
-nix run .#bifrost -- down
+bifrost-http -host 127.0.0.1 -port 18080 -app-dir ./bifrost
 ```
 
 Run ccusage through the flake app:
@@ -105,9 +110,6 @@ nix run .#ccusage -- daily
 nix run .#ccusage -- monthly
 nix run .#ccusage -- claude blocks
 ```
-
-Docker Desktop or a Docker daemon must already be running. The flake supplies
-client tools; it does not start the Docker daemon.
 
 ## Taskfile commands
 
@@ -121,9 +123,7 @@ Bifrost tasks:
 
 ```bash
 task bifrost:up
-task bifrost:logs
-task bifrost:restart
-task bifrost:down
+task bifrost:check
 ```
 
 ccusage tasks:
@@ -194,7 +194,7 @@ To change the hard daily backstop, edit `bifrost/config.json`:
 Then restart:
 
 ```bash
-scripts/bifrost-compose.sh restart
+nix run .#bifrost-host
 ```
 
 Bifrost uses `config_store` with SQLite. If you edit entities in
@@ -291,16 +291,105 @@ http://127.0.0.1:18080/v1
 Use `BIFROST_VK_PERSONAL` as the client API key if your client sends
 OpenAI-style bearer auth; otherwise send `x-bf-vk` explicitly.
 
+## Codex and Claude Code Checks
+
+Start the disposable check gateway:
+
+```bash
+nix run .#bifrost-check
+```
+
+Check that Codex and Claude Code account auth exists locally without printing
+secrets:
+
+```bash
+jq -r '.auth_mode // empty' ~/.codex/auth.json
+claude auth status
+```
+
+### Claude Code Enterprise or Max account budget
+
+Claude Code Enterprise/Max account auth can stay in Claude Code. The login flow
+does not need to go through Bifrost, but the model requests must use Bifrost as
+`ANTHROPIC_BASE_URL` so Bifrost can apply the Virtual Key budget.
+
+Use `ANTHROPIC_CUSTOM_HEADERS` for the Bifrost Virtual Key. Do not use
+`ANTHROPIC_AUTH_TOKEN` for this mode because Claude Code needs the
+`Authorization` bearer token for its Anthropic account/OAuth session:
+
+```bash
+source .env
+unset ANTHROPIC_AUTH_TOKEN
+unset ANTHROPIC_API_KEY
+ANTHROPIC_BASE_URL=http://127.0.0.1:18082/anthropic \
+ANTHROPIC_CUSTOM_HEADERS="x-bf-vk: $BIFROST_VK_PERSONAL" \
+claude -p --model sonnet "Reply with one short sentence."
+```
+
+In this mode Bifrost uses the `x-bf-vk` header for governance and forwards the
+Claude Code OAuth bearer upstream for Anthropic Claude models. This is the path
+to use when the upstream capacity is your Claude Code Enterprise/Max plan and
+the budget must be enforced by Bifrost.
+
+Bifrost's documented generic Claude Code mode is different: it uses the Virtual
+Key as `ANTHROPIC_AUTH_TOKEN`. That is useful when Bifrost should route to
+normal provider API keys, but it does not use the Claude Code account session:
+
+```bash
+source .env
+ANTHROPIC_BASE_URL=http://127.0.0.1:18082/anthropic \
+ANTHROPIC_AUTH_TOKEN="$BIFROST_VK_PERSONAL" \
+claude -p "Reply with one short sentence."
+```
+
+Codex CLI can target Bifrost through a custom model provider. Use the Bifrost
+Virtual Key as the provider API key:
+
+```bash
+source .env
+OPENAI_API_KEY="$BIFROST_VK_PERSONAL" \
+codex exec \
+  -c 'model_provider="bifrost-openai"' \
+  -c 'model_providers.bifrost-openai={name="Bifrost OpenAI", base_url="http://127.0.0.1:18082/openai/v1", env_key="OPENAI_API_KEY", wire_api="responses"}' \
+  -m openai/gpt-4o-mini \
+  "Reply with one short sentence."
+```
+
+For Codex/ChatGPT subscription auth, Bifrost cannot currently reuse the local
+ChatGPT login as an OpenAI upstream API credential. Codex can still be budgeted
+through Bifrost, but the upstream OpenAI-compatible provider needs a real
+provider API key.
+
+The check config therefore supports two cases:
+
+- Claude Code Enterprise/Max account upstream: no `ANTHROPIC_API_KEY` is needed
+  for Anthropic Claude-model requests when using the `ANTHROPIC_CUSTOM_HEADERS`
+  command above.
+- Normal Bifrost routing to providers such as OpenAI, Anthropic API, Gemini,
+  Bedrock, Vertex, and others: configure the provider credentials expected by
+  that provider.
+
 ## macOS launchd
 
 The LaunchAgent runs:
 
 ```bash
-nix develop <repo> --command <repo>/scripts/bifrost-compose.sh up
+<repo>/result-bifrost-http/bin/bifrost-http -host 127.0.0.1 -port 18080 -app-dir <repo>/bifrost
 ```
 
-It starts at login and repeats every 300 seconds to make sure the compose
-service is up. Docker's `restart: unless-stopped` handles container restarts.
+It starts Bifrost on the host at login and keeps it alive. The plist sources
+`<repo>/.env` before launching so `bifrost/config.json` can use environment
+references such as `env.BIFROST_ENCRYPTION_KEY`, `env.OPENAI_API_KEY`, and
+`env.ANTHROPIC_API_KEY`.
+
+The installer resolves the host binary with:
+
+```bash
+nix build --out-link result-bifrost-http .#bifrost-http
+```
+
+Set `BIFROST_BIN=/absolute/path/to/bifrost-http` only when you want to bypass
+the Nix-pinned binary.
 
 Install:
 
@@ -323,8 +412,8 @@ scripts/uninstall-launchd.sh
 Logs are written to:
 
 ```text
-~/Library/Logs/ai-budget-manager/bifrost-launchd.out.log
-~/Library/Logs/ai-budget-manager/bifrost-launchd.err.log
+~/Library/Logs/ai-budget-manager/bifrost-host-launchd.out.log
+~/Library/Logs/ai-budget-manager/bifrost-host-launchd.err.log
 ```
 
 ## Using Headroom
