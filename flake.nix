@@ -1,5 +1,5 @@
 {
-  description = "Local Bifrost configuration for personal AI budget management";
+  description = "bifrost-gage local Bifrost budget manager";
 
   inputs = {
     ccusage.url = "github:ryoppippi/ccusage";

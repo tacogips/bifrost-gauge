@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "BifrostBudgetBar",
+    name: "bifrost-gage",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "BifrostBudgetBar", targets: ["BifrostBudgetBar"])
+        .executable(name: "bifrost-gage", targets: ["BifrostGage"])
     ],
     targets: [
         .executableTarget(
-            name: "BifrostBudgetBar",
-            path: "Sources/BifrostBudgetBar"
+            name: "BifrostGage",
+            path: "Sources/BifrostGage"
         )
     ]
 )

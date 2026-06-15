@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.local.ai-budget-manager.bifrost</string>
+  <string>com.local.bifrost-gage.bifrost</string>
 
   <key>ProgramArguments</key>
   <array>

@@ -1,4 +1,4 @@
-# ai-budget-manager
+# bifrost-gage
 
 Local Bifrost configuration for personal LLM budget management.
 
@@ -27,11 +27,11 @@ Taskfile.yml                               go-task commands for Bifrost and ccus
 .env.example                               Local environment template
 bifrost/config.json                        Bifrost app-dir config
 bifrost-check/config.json                  Disposable host-run check config
-launchd/com.local.ai-budget-manager...     macOS launchd template
+launchd/com.local.bifrost-gage...          macOS launchd template
 scripts/bifrost-compose.sh                 Optional Compose helper
 scripts/install-launchd.sh                 Install macOS LaunchAgent
 scripts/uninstall-launchd.sh               Remove macOS LaunchAgent
-macos/BifrostBudgetBar                     Swift macOS menu bar budget app
+macos/bifrost-gage                         Swift macOS menu bar budget app
 ```
 
 Runtime state is written under `./bifrost` as SQLite files. Those database files
@@ -203,7 +203,7 @@ on startup. UI/API-only changes are stored in `bifrost/config.db`.
 
 ## macOS Menu Bar Budget App
 
-`macos/BifrostBudgetBar` is a small Swift/AppKit status bar app. It polls the
+`macos/bifrost-gage` is a small Swift/AppKit status bar app. It polls the
 local Bifrost governance API, shows budget progress in the menu bar, and exposes
 budget controls from the click menu:
 
@@ -221,7 +221,7 @@ budget controls from the click menu:
 Run it directly:
 
 ```bash
-swift run --package-path macos/BifrostBudgetBar BifrostBudgetBar -- \
+swift run --package-path macos/bifrost-gage bifrost-gage -- \
   --base-url http://127.0.0.1:18080 \
   --vk-id vk-personal \
   --budget-id budget-personal-daily-hard
@@ -232,7 +232,7 @@ For a monthly Claude Code Virtual Key, point the app at that key and budget:
 ```bash
 BIFROST_VIRTUAL_KEY_ID=vk-claude-code \
 BIFROST_BUDGET_ID=budget-claude-code-monthly \
-swift run --package-path macos/BifrostBudgetBar BifrostBudgetBar
+swift run --package-path macos/bifrost-gage bifrost-gage
 ```
 
 The app also accepts:
@@ -400,7 +400,7 @@ scripts/install-launchd.sh
 Check status:
 
 ```bash
-launchctl print "gui/$(id -u)/com.local.ai-budget-manager.bifrost"
+launchctl print "gui/$(id -u)/com.local.bifrost-gage.bifrost"
 ```
 
 Uninstall:
@@ -412,8 +412,8 @@ scripts/uninstall-launchd.sh
 Logs are written to:
 
 ```text
-~/Library/Logs/ai-budget-manager/bifrost-host-launchd.out.log
-~/Library/Logs/ai-budget-manager/bifrost-host-launchd.err.log
+~/Library/Logs/bifrost-gage/bifrost-host-launchd.out.log
+~/Library/Logs/bifrost-gage/bifrost-host-launchd.err.log
 ```
 
 ## Using Headroom

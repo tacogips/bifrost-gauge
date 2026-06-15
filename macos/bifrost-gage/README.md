@@ -1,11 +1,11 @@
-# BifrostBudgetBar
+# bifrost-gage
 
 Small macOS menu bar app for local Bifrost budget status and controls.
 
 ## Run
 
 ```bash
-swift run --package-path macos/BifrostBudgetBar BifrostBudgetBar -- \
+swift run --package-path macos/bifrost-gage bifrost-gage -- \
   --base-url http://127.0.0.1:18080 \
   --vk-id vk-personal \
   --budget-id budget-personal-daily-hard
@@ -18,7 +18,7 @@ export BIFROST_BASE_URL=http://127.0.0.1:18080
 export BIFROST_VIRTUAL_KEY_ID=vk-personal
 export BIFROST_BUDGET_ID=budget-personal-daily-hard
 export BIFROST_REFRESH_SECONDS=60
-swift run --package-path macos/BifrostBudgetBar BifrostBudgetBar
+swift run --package-path macos/bifrost-gage bifrost-gage
 ```
 
 If `BIFROST_BUDGET_ID` is omitted, the app picks a `1M` budget first and then

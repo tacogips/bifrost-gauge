@@ -6,10 +6,13 @@ if [ "$(uname -s)" != "Darwin" ]; then
   exit 1
 fi
 
-label="com.local.ai-budget-manager.bifrost"
-plist="$HOME/Library/LaunchAgents/$label.plist"
+label="com.local.bifrost-gage.bifrost"
+legacy_label="com.local.ai-budget-manager.bifrost"
 
-launchctl bootout "gui/$(id -u)" "$plist" >/dev/null 2>&1 || true
-rm -f "$plist"
+for current_label in "$label" "$legacy_label"; do
+  plist="$HOME/Library/LaunchAgents/$current_label.plist"
+  launchctl bootout "gui/$(id -u)" "$plist" >/dev/null 2>&1 || true
+  rm -f "$plist"
+done
 
 echo "Uninstalled $label"

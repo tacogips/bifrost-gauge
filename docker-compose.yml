@@ -1,9 +1,9 @@
-name: ai-budget-manager
+name: bifrost-gage
 
 services:
   bifrost:
     image: maximhq/bifrost:${BIFROST_IMAGE_TAG:-latest}
-    container_name: ai-budget-manager-bifrost
+    container_name: bifrost-gage-bifrost
     restart: unless-stopped
     ports:
       - "${BIFROST_BIND_HOST:-127.0.0.1}:${BIFROST_PORT:-18080}:8080"
@@ -13,7 +13,7 @@ services:
       LOG_LEVEL: ${BIFROST_LOG_LEVEL:-info}
       LOG_STYLE: ${BIFROST_LOG_STYLE:-pretty}
       BIFROST_ENCRYPTION_KEY: ${BIFROST_ENCRYPTION_KEY:-local-dev-change-me-32-byte-key}
-      BIFROST_VK_PERSONAL: ${BIFROST_VK_PERSONAL:-local-personal-vk}
+      BIFROST_VK_PERSONAL: ${BIFROST_VK_PERSONAL:-sk-bf-local-personal-vk}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:

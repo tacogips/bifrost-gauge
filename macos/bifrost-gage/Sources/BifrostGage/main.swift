@@ -408,7 +408,7 @@ struct ProviderBudgetUpdatePayload: Encodable {
     }
 }
 
-enum BudgetBarError: LocalizedError {
+enum BifrostGageError: LocalizedError {
     case missingBudget
     case httpStatus(Int, String)
     case invalidResponse
@@ -450,15 +450,15 @@ final class BifrostClient {
                 return
             }
             guard let self else {
-                completion(.failure(BudgetBarError.invalidResponse))
+                completion(.failure(BifrostGageError.invalidResponse))
                 return
             }
             guard let http = response as? HTTPURLResponse, let data else {
-                completion(.failure(BudgetBarError.invalidResponse))
+                completion(.failure(BifrostGageError.invalidResponse))
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
-                completion(.failure(BudgetBarError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
+                completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
                 return
             }
             do {
@@ -591,11 +591,11 @@ final class BifrostClient {
                     return
                 }
                 guard let http = response as? HTTPURLResponse else {
-                    completion(.failure(BudgetBarError.invalidResponse))
+                    completion(.failure(BifrostGageError.invalidResponse))
                     return
                 }
                 guard (200..<300).contains(http.statusCode) else {
-                    completion(.failure(BudgetBarError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
+                    completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
                     return
                 }
                 completion(.success(()))
@@ -649,11 +649,11 @@ final class BifrostClient {
                     return
                 }
                 guard let http = response as? HTTPURLResponse else {
-                    completion(.failure(BudgetBarError.invalidResponse))
+                    completion(.failure(BifrostGageError.invalidResponse))
                     return
                 }
                 guard (200..<300).contains(http.statusCode) else {
-                    completion(.failure(BudgetBarError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
+                    completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
                     return
                 }
                 completion(.success(()))
@@ -688,11 +688,11 @@ final class BifrostClient {
                 return
             }
             guard let http = response as? HTTPURLResponse, let data else {
-                completion(.failure(BudgetBarError.invalidResponse))
+                completion(.failure(BifrostGageError.invalidResponse))
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
-                completion(.failure(BudgetBarError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
+                completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
                 return
             }
             do {
@@ -773,7 +773,7 @@ struct CronExpression {
     init(_ raw: String) throws {
         let fields = raw.split(separator: " ").map(String.init)
         guard fields.count == 5 else {
-            throw BudgetBarError.invalidCron(raw)
+            throw BifrostGageError.invalidCron(raw)
         }
         self.raw = raw
         self.minute = try CronField(fields[0], min: 0, max: 59)
@@ -803,7 +803,7 @@ struct CronField {
             let stepParts = part.split(separator: "/", maxSplits: 1).map(String.init)
             let base = stepParts[0]
             let step = stepParts.count == 2 ? Int(stepParts[1]) ?? 0 : 1
-            guard step > 0 else { throw BudgetBarError.invalidCron(raw) }
+            guard step > 0 else { throw BifrostGageError.invalidCron(raw) }
 
             let range: ClosedRange<Int>
             if base == "*" {
@@ -811,13 +811,13 @@ struct CronField {
             } else if base.contains("-") {
                 let bounds = base.split(separator: "-", maxSplits: 1).compactMap { Int($0) }
                 guard bounds.count == 2, bounds[0] <= bounds[1], bounds[0] >= min, bounds[1] <= max else {
-                    throw BudgetBarError.invalidCron(raw)
+                    throw BifrostGageError.invalidCron(raw)
                 }
                 range = bounds[0]...bounds[1]
             } else if let value = Int(base), value >= min, value <= max {
                 range = value...value
             } else {
-                throw BudgetBarError.invalidCron(raw)
+                throw BifrostGageError.invalidCron(raw)
             }
 
             for value in range where (value - range.lowerBound).isMultiple(of: step) {
@@ -1185,7 +1185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentVirtualKey = virtualKey
             guard let target = client.selectedTarget(from: virtualKey) else {
                 currentTarget = nil
-                setError(BudgetBarError.missingBudget.localizedDescription)
+                setError(BifrostGageError.missingBudget.localizedDescription)
                 return
             }
             currentTarget = target
@@ -1464,19 +1464,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var launchAgentURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents/com.local.ai-budget-manager.budgetbar.plist")
+            .appendingPathComponent("Library/LaunchAgents/com.local.bifrost-gage.menubar.plist")
     }
 
     private func installLaunchAgent() throws {
         guard let executablePath = Bundle.main.executableURL?.path else {
-            throw BudgetBarError.invalidResponse
+            throw BifrostGageError.invalidResponse
         }
         let logDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/ai-budget-manager")
+            .appendingPathComponent("Library/Logs/bifrost-gage")
         try FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
 
         let payload: [String: Any] = [
-            "Label": "com.local.ai-budget-manager.budgetbar",
+            "Label": "com.local.bifrost-gage.menubar",
             "ProgramArguments": [executablePath],
             "EnvironmentVariables": [
                 "BIFROST_BASE_URL": settings.baseURL.absoluteString,
@@ -1487,8 +1487,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ],
             "RunAtLoad": true,
             "KeepAlive": true,
-            "StandardOutPath": logDir.appendingPathComponent("budgetbar-launchd.out.log").path,
-            "StandardErrorPath": logDir.appendingPathComponent("budgetbar-launchd.err.log").path,
+            "StandardOutPath": logDir.appendingPathComponent("bifrost-gage-launchd.out.log").path,
+            "StandardErrorPath": logDir.appendingPathComponent("bifrost-gage-launchd.err.log").path,
             "WorkingDirectory": FileManager.default.currentDirectoryPath
         ]
 
