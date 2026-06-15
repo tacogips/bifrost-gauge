@@ -1,0 +1,83 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "encryption_key": "env.BIFROST_ENCRYPTION_KEY",
+  "client": {
+    "drop_excess_requests": false,
+    "enforce_auth_on_inference": true
+  },
+  "providers": {
+    "openai": {
+      "keys": [
+        {
+          "name": "openai-primary",
+          "value": "env.OPENAI_API_KEY",
+          "models": ["*"],
+          "weight": 1.0
+        }
+      ]
+    },
+    "anthropic": {
+      "keys": [
+        {
+          "name": "anthropic-primary",
+          "value": "env.ANTHROPIC_API_KEY",
+          "models": ["*"],
+          "weight": 1.0
+        }
+      ]
+    }
+  },
+  "governance": {
+    "budgets": [
+      {
+        "id": "budget-personal-daily-hard",
+        "virtual_key_id": "vk-personal",
+        "max_limit": 20.0,
+        "reset_duration": "1d",
+        "calendar_aligned": true
+      }
+    ],
+    "rate_limits": [
+      {
+        "id": "rl-personal-hourly",
+        "request_max_limit": 1000,
+        "request_reset_duration": "1h",
+        "token_max_limit": 1000000,
+        "token_reset_duration": "1h"
+      }
+    ],
+    "virtual_keys": [
+      {
+        "id": "vk-personal",
+        "name": "personal-daily-budget",
+        "description": "Local personal key with a daily hard budget backstop.",
+        "value": "env.BIFROST_VK_PERSONAL",
+        "is_active": true,
+        "rate_limit_id": "rl-personal-hourly",
+        "provider_configs": [
+          {
+            "id": 1,
+            "provider": "openai",
+            "allowed_models": ["*"],
+            "key_ids": ["*"],
+            "weight": 1.0
+          },
+          {
+            "id": 2,
+            "provider": "anthropic",
+            "allowed_models": ["*"],
+            "key_ids": ["*"],
+            "weight": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "./config.db"
+    }
+  }
+}
