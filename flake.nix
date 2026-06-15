@@ -6,40 +6,50 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, ccusage, nixpkgs }:
+  outputs =
+    {
+      self,
+      ccusage,
+      nixpkgs,
+    }:
     let
       systems = [
         "aarch64-darwin"
-        "aarch64-linux"
         "x86_64-darwin"
-        "x86_64-linux"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
       mkPkgs = system: import nixpkgs { inherit system; };
       ccusagePackage = system: ccusage.packages.${system}.default;
+      xcodeSwiftVersion = "6.3.2";
       bifrostHttpVersion = "v1.5.13";
       bifrostHttpHashes = {
         aarch64-darwin = "sha256-SIO1DwXa0gMFzuHrBkerb2TyrTXXm9Kac6UZrCML1A4=";
         x86_64-darwin = "sha256-FdAFc3awr1UNuT16UmrtnZSX2PWaCf4rqMTrYfAWoUc=";
-        aarch64-linux = "sha256-KFDKVjwcfoV2uAx4HcacAV63dhp5GoFh1gFxVtS2sCo=";
-        x86_64-linux = "sha256-u8KftW07YAtxRL0Nx0wzWhhZJo3To/8PGQKOvAfgAh0=";
       };
-      bifrostHttpPlatform = system:
+      bifrostHttpPlatform =
+        system:
         let
           parts = nixpkgs.lib.splitString "-" system;
           cpu = builtins.elemAt parts 0;
           os = builtins.elemAt parts 1;
           arch =
-            if cpu == "aarch64" then "arm64"
-            else if cpu == "x86_64" then "amd64"
-            else throw "Unsupported Bifrost CPU: ${cpu}";
+            if cpu == "aarch64" then
+              "arm64"
+            else if cpu == "x86_64" then
+              "amd64"
+            else
+              throw "Unsupported Bifrost CPU: ${cpu}";
           platform =
-            if os == "darwin" then "darwin"
-            else if os == "linux" then "linux"
-            else throw "Unsupported Bifrost OS: ${os}";
+            if os == "darwin" then
+              "darwin"
+            else
+              throw "Unsupported Bifrost OS: ${os}";
         in
-        { inherit platform arch; };
-      bifrostHttpPackage = system:
+        {
+          inherit platform arch;
+        };
+      bifrostHttpPackage =
+        system:
         let
           pkgs = mkPkgs system;
           platformInfo = bifrostHttpPlatform system;
@@ -74,7 +84,8 @@
         default = bifrostHttpPackage system;
       });
 
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = mkPkgs system;
           bifrostHttp = bifrostHttpPackage system;
@@ -92,15 +103,42 @@
             ];
 
             shellHook = ''
+              export BIFROST_GAGE_DEVELOPER_DIR="''${BIFROST_GAGE_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+              export BIFROST_GAGE_SDKROOT="''${BIFROST_GAGE_SDKROOT:-$BIFROST_GAGE_DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
+              export DEVELOPER_DIR="$BIFROST_GAGE_DEVELOPER_DIR"
+              export SDKROOT="$BIFROST_GAGE_SDKROOT"
+              export BIFROST_GAGE_XCODE_TOOLCHAIN_DIR="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin"
+              export BIFROST_GAGE_XCODE_SWIFT="$BIFROST_GAGE_XCODE_TOOLCHAIN_DIR/swift"
+
+              if [ ! -x "$BIFROST_GAGE_XCODE_SWIFT" ]; then
+                echo "error: Xcode Swift ${xcodeSwiftVersion} not found at $BIFROST_GAGE_XCODE_SWIFT" >&2
+                echo "Install/select Xcode 26.5, or set BIFROST_GAGE_DEVELOPER_DIR." >&2
+                return 1
+              fi
+
+              export PATH="$BIFROST_GAGE_XCODE_TOOLCHAIN_DIR:$PATH"
+              xcode_swift_version="$("$BIFROST_GAGE_XCODE_SWIFT" --version 2>/dev/null | head -n 1 || true)"
+              case "$xcode_swift_version" in
+                *"Apple Swift version ${xcodeSwiftVersion}"*|*"Swift version ${xcodeSwiftVersion}"*) ;;
+                *)
+                  echo "error: expected Xcode Swift ${xcodeSwiftVersion}, got: ''${xcode_swift_version:-not available}" >&2
+                  return 1
+                  ;;
+              esac
+
               echo "Bifrost local tools are available."
+              echo "Swift version: $xcode_swift_version"
+              echo "Swift toolchain: $BIFROST_GAGE_XCODE_TOOLCHAIN_DIR"
               echo "Run: nix run .#bifrost-host"
               echo "Check config: nix run .#bifrost-check"
               echo "Usage reports: task ccusage:daily"
             '';
           };
-        });
+        }
+      );
 
-      apps = forAllSystems (system:
+      apps = forAllSystems (
+        system:
         let
           pkgs = mkPkgs system;
           ccusageBin = ccusagePackage system;
@@ -194,6 +232,7 @@
             type = "app";
             program = "${ccusageBin}/bin/ccusage";
           };
-        });
+        }
+      );
     };
 }
