@@ -1,0 +1,120 @@
+version: '3'
+
+dotenv:
+  - .env
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  bifrost:up:
+    desc: Start local Bifrost in the background
+    cmds:
+      - ./scripts/bifrost-compose.sh up {{.CLI_ARGS}}
+
+  bifrost:down:
+    desc: Stop local Bifrost
+    cmds:
+      - ./scripts/bifrost-compose.sh down {{.CLI_ARGS}}
+
+  bifrost:restart:
+    desc: Restart local Bifrost
+    cmds:
+      - ./scripts/bifrost-compose.sh restart {{.CLI_ARGS}}
+
+  bifrost:logs:
+    desc: Follow local Bifrost logs
+    cmds:
+      - ./scripts/bifrost-compose.sh logs {{.CLI_ARGS}}
+
+  bifrost:pull:
+    desc: Pull the configured Bifrost image
+    cmds:
+      - ./scripts/bifrost-compose.sh pull {{.CLI_ARGS}}
+
+  bifrost:ps:
+    desc: Show Bifrost container status
+    cmds:
+      - ./scripts/bifrost-compose.sh ps {{.CLI_ARGS}}
+
+  bifrost:config:
+    desc: Render the resolved Docker Compose config
+    cmds:
+      - ./scripts/bifrost-compose.sh config {{.CLI_ARGS}}
+
+  ccusage:
+    desc: Run ccusage with custom args, e.g. task ccusage -- monthly
+    cmds:
+      - ccusage {{.CLI_ARGS}}
+
+  ccusage:daily:
+    desc: Show daily usage across all detected agent sources
+    cmds:
+      - ccusage daily {{.CLI_ARGS}}
+
+  ccusage:weekly:
+    desc: Show weekly usage across all detected agent sources
+    cmds:
+      - ccusage weekly {{.CLI_ARGS}}
+
+  ccusage:monthly:
+    desc: Show monthly usage across all detected agent sources
+    cmds:
+      - ccusage monthly {{.CLI_ARGS}}
+
+  ccusage:session:
+    desc: Show usage grouped by conversation/session
+    cmds:
+      - ccusage session {{.CLI_ARGS}}
+
+  ccusage:blocks:
+    desc: Show Claude Code five-hour billing blocks
+    cmds:
+      - ccusage blocks {{.CLI_ARGS}}
+
+  ccusage:blocks:live:
+    desc: Watch Claude Code five-hour billing blocks live
+    cmds:
+      - ccusage blocks --live {{.CLI_ARGS}}
+
+  ccusage:statusline:
+    desc: Print ccusage statusline output for Claude Code hooks
+    cmds:
+      - ccusage statusline {{.CLI_ARGS}}
+
+  ccusage:claude:daily:
+    desc: Show Claude Code daily usage
+    cmds:
+      - ccusage claude daily {{.CLI_ARGS}}
+
+  ccusage:claude:monthly:
+    desc: Show Claude Code monthly usage
+    cmds:
+      - ccusage claude monthly {{.CLI_ARGS}}
+
+  ccusage:claude:session:
+    desc: Show Claude Code session usage
+    cmds:
+      - ccusage claude session {{.CLI_ARGS}}
+
+  ccusage:claude:blocks:
+    desc: Show Claude Code five-hour billing blocks
+    cmds:
+      - ccusage claude blocks {{.CLI_ARGS}}
+
+  ccusage:codex:daily:
+    desc: Show Codex daily usage
+    cmds:
+      - ccusage codex daily {{.CLI_ARGS}}
+
+  ccusage:codex:monthly:
+    desc: Show Codex monthly usage
+    cmds:
+      - ccusage codex monthly {{.CLI_ARGS}}
+
+  ccusage:codex:session:
+    desc: Show Codex session usage
+    cmds:
+      - ccusage codex session {{.CLI_ARGS}}

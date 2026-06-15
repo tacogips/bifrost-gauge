@@ -14,34 +14,52 @@
         "x86_64-linux"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
+      mkPkgs = system: import nixpkgs { inherit system; };
+      mkCcusage = pkgs: pkgs.writeShellApplication {
+        name = "ccusage";
+        runtimeInputs = with pkgs; [
+          nodejs
+        ];
+        text = ''
+          set -euo pipefail
+
+          exec npx --yes ccusage@latest "$@"
+        '';
+      };
     in
     {
       devShells = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = mkPkgs system;
+          ccusage = mkCcusage pkgs;
         in
         {
           default = pkgs.mkShell {
-            packages = with pkgs; [
-              bash
-              coreutils
-              docker-client
-              docker-compose
-              gitMinimal
-              jq
+            packages = [
+              pkgs.bash
+              pkgs.coreutils
+              pkgs.docker-client
+              pkgs.docker-compose
+              pkgs.gitMinimal
+              pkgs.go-task
+              pkgs.jq
+              pkgs.nodejs
+              ccusage
             ];
 
             shellHook = ''
               echo "Bifrost local tools are available."
-              echo "Run: scripts/bifrost-compose.sh up"
+              echo "Run: task bifrost:up"
               echo "Or:  nix run .#bifrost -- up"
+              echo "Usage reports: task ccusage:daily"
             '';
           };
         });
 
       apps = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = mkPkgs system;
+          ccusage = mkCcusage pkgs;
           bifrost = pkgs.writeShellApplication {
             name = "bifrost";
             runtimeInputs = with pkgs; [
@@ -67,6 +85,10 @@
           bifrost = {
             type = "app";
             program = "${bifrost}/bin/bifrost";
+          };
+          ccusage = {
+            type = "app";
+            program = "${ccusage}/bin/ccusage";
           };
         });
     };

@@ -23,6 +23,7 @@ App / Agent
 ```text
 docker-compose.yml                         Local Bifrost service
 flake.nix                                  Nix dev shell and nix run wrapper
+Taskfile.yml                               go-task commands for Bifrost and ccusage
 .env.example                               Local environment template
 bifrost/config.json                        Bifrost app-dir config
 launchd/com.local.ai-budget-manager...     macOS launchd template
@@ -81,7 +82,8 @@ BIFROST_PORT=8080
 
 ## Start with Nix
 
-Enter a shell with Docker client, Docker Compose, and jq:
+Enter a shell with Docker client, Docker Compose, go-task, jq, Node.js, and a
+`ccusage` wrapper:
 
 ```bash
 nix develop
@@ -96,8 +98,68 @@ nix run .#bifrost -- restart
 nix run .#bifrost -- down
 ```
 
+Run ccusage through the flake app:
+
+```bash
+nix run .#ccusage -- daily
+nix run .#ccusage -- monthly
+nix run .#ccusage -- claude blocks
+```
+
 Docker Desktop or a Docker daemon must already be running. The flake supplies
 client tools; it does not start the Docker daemon.
+
+## Taskfile commands
+
+Inside `nix develop`, use `task` as the main command surface:
+
+```bash
+task --list
+```
+
+Bifrost tasks:
+
+```bash
+task bifrost:up
+task bifrost:logs
+task bifrost:restart
+task bifrost:down
+```
+
+ccusage tasks:
+
+```bash
+task ccusage:daily
+task ccusage:weekly
+task ccusage:monthly
+task ccusage:session
+task ccusage:blocks
+task ccusage:blocks:live
+```
+
+Focused Claude Code and Codex reports:
+
+```bash
+task ccusage:claude:daily
+task ccusage:claude:monthly
+task ccusage:claude:blocks
+task ccusage:codex:daily
+task ccusage:codex:monthly
+```
+
+Pass extra flags after `--`:
+
+```bash
+task ccusage:daily -- --help
+task ccusage:claude:daily -- --mode display
+task ccusage:codex:daily -- --speed fast
+```
+
+The `ccusage` command provided by this flake delegates to:
+
+```bash
+npx --yes ccusage@latest
+```
 
 ## Bifrost governance
 
