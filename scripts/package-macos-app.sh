@@ -12,6 +12,12 @@ Builds a macOS app bundle release artifact for Homebrew Cask:
   release/bifrost-gauge_<version>_aarch64.app.zip.sha256
 
 The version may be passed as 0.1.0 or v0.1.0.
+
+By default the app is ad-hoc signed for local testing. For public distribution,
+set BIFROST_GAUGE_NOTARIZE=1. The script uses APPLE_SIGNING_IDENTITY, APPLE_ID,
+APPLE_PASSWORD, and APPLE_TEAM_ID. If those are not already set, it loads them
+from kinko using this repository path, or BIFROST_GAUGE_SIGNING_ENV_DIR when
+set.
 USAGE
 }
 
@@ -68,10 +74,80 @@ required_swift_version="6.3.2"
 developer_dir="${BIFROST_GAUGE_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 sdkroot="${BIFROST_GAUGE_SDKROOT:-$developer_dir/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
 swift_bin="${BIFROST_GAUGE_XCODE_SWIFT:-$developer_dir/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift}"
+notarize="${BIFROST_GAUGE_NOTARIZE:-0}"
+signing_env_dir="${BIFROST_GAUGE_SIGNING_ENV_DIR:-$repo_root}"
+
+notarytool_args() {
+  if [ -n "${BIFROST_GAUGE_NOTARY_PROFILE:-}" ]; then
+    printf '%s\n' "--keychain-profile" "$BIFROST_GAUGE_NOTARY_PROFILE"
+    return
+  fi
+
+  if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ]; then
+    notary_profile="${BIFROST_GAUGE_GENERATED_NOTARY_PROFILE:-bifrost-gauge-release}"
+    printf '%s\n' "$APPLE_PASSWORD" |
+      xcrun notarytool store-credentials "$notary_profile" \
+        --apple-id "$APPLE_ID" \
+        --team-id "$APPLE_TEAM_ID" \
+        --validate >/dev/null
+    printf '%s\n' "--keychain-profile" "$notary_profile"
+    return
+  fi
+
+  echo "error: notarization requires BIFROST_GAUGE_NOTARY_PROFILE or APPLE_ID, APPLE_TEAM_ID, and APPLE_PASSWORD" >&2
+  exit 1
+}
+
+load_signing_env() {
+  if [ "$notarize" != "1" ]; then
+    return
+  fi
+
+  if [ -n "${APPLE_SIGNING_IDENTITY:-}" ] &&
+    [ -n "${APPLE_ID:-}" ] &&
+    [ -n "${APPLE_PASSWORD:-}" ] &&
+    [ -n "${APPLE_TEAM_ID:-}" ]; then
+    return
+  fi
+
+  if [ -z "$signing_env_dir" ]; then
+    return
+  fi
+
+  if ! command -v kinko >/dev/null 2>&1; then
+    echo "error: kinko is required to load signing env from $signing_env_dir" >&2
+    exit 1
+  fi
+
+  eval "$(kinko export bash --path "$signing_env_dir" --force --confirm=false)"
+}
 
 if [ ! -x "$swift_bin" ]; then
   echo "error: Swift toolchain not found at $swift_bin" >&2
   exit 1
+fi
+
+case "$notarize" in
+  0 | 1) ;;
+  *)
+    echo "error: BIFROST_GAUGE_NOTARIZE must be 0 or 1" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$notarize" = "1" ]; then
+  require_command security
+  require_command spctl
+  require_command xcrun
+  load_signing_env
+  codesign_identity="${BIFROST_GAUGE_CODESIGN_IDENTITY:-${APPLE_SIGNING_IDENTITY:-}}"
+  if [ -z "$codesign_identity" ] || [ "$codesign_identity" = "-" ]; then
+    echo "error: notarization requires APPLE_SIGNING_IDENTITY or BIFROST_GAUGE_CODESIGN_IDENTITY" >&2
+    exit 1
+  fi
+  security find-identity -v -p codesigning | grep -F -- "$codesign_identity" >/dev/null
+else
+  codesign_identity="${BIFROST_GAUGE_CODESIGN_IDENTITY:--}"
 fi
 
 swift_version="$("$swift_bin" --version 2>/dev/null | head -n 1 || true)"
@@ -134,10 +210,25 @@ EOF
 
 printf 'APPL????' > "$app_path/Contents/PkgInfo"
 
-codesign --force --deep --sign - "$app_path"
+if [ "$codesign_identity" = "-" ]; then
+  codesign --force --deep --sign - "$app_path"
+else
+  codesign --force --deep --options runtime --timestamp --sign "$codesign_identity" "$app_path"
+fi
 codesign --verify --deep --strict --verbose=2 "$app_path"
 
 ditto -c -k --norsrc --keepParent "$app_path" "$zip_path"
+
+if [ "$notarize" = "1" ]; then
+  mapfile -t notary_args < <(notarytool_args)
+  xcrun notarytool submit "$zip_path" --wait "${notary_args[@]}"
+  xcrun stapler staple "$app_path"
+  xcrun stapler validate "$app_path"
+  spctl --assess --type execute --verbose=4 "$app_path"
+  rm -f "$zip_path"
+  ditto -c -k --norsrc --keepParent "$app_path" "$zip_path"
+fi
+
 zip_sha="$(shasum -a 256 "$zip_path" | awk '{print $1}')"
 printf '%s  %s\n' "$zip_sha" "$(basename "$zip_path")" | tee "$sha_path"
 
