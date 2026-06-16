@@ -30,6 +30,12 @@ Bifrost official links:
 Budget state is owned by Bifrost. `bifrost-gauge` only reads and updates Bifrost
 through its governance API.
 
+## Screenshots
+
+<img src="docs/assets/bifrost-gauge-menu-bar.png" alt="bifrost-gauge menu bar budget usage indicator" width="154">
+
+<img src="docs/assets/bifrost-gauge-menu.png" alt="bifrost-gauge menu showing budget usage, settings, and actions" width="420">
+
 ## Requirements
 
 - macOS
