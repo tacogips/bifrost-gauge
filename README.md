@@ -148,6 +148,73 @@ The generated plist is based on:
 launchd/com.local.bifrost-gauge.bifrost.plist.template
 ```
 
+For a nix-darwin configuration example that installs `bifrost-gauge` with
+Homebrew Cask and starts both Bifrost and the menu bar app with launchd, see:
+
+```text
+examples/nix-darwin-bifrost-gauge.nix
+```
+
+The sample installs the app through Cask and runs Bifrost from this repository's
+pinned Nix package. It does not require a local clone at runtime and does not
+depend on kinko. It reads Bifrost secrets from:
+
+```text
+~/.config/bifrost-gauge/bifrost.env
+```
+
+## Agent Client Setup
+
+### Claude Code
+
+For Claude Code account/OAuth login, keep Claude Code's normal login and send
+the Bifrost Virtual Key only as the local governance header:
+
+```bash
+source .env
+# or, when using examples/nix-darwin-bifrost-gauge.nix:
+# source ~/.config/bifrost-gauge/bifrost.env
+
+unset ANTHROPIC_AUTH_TOKEN
+unset ANTHROPIC_API_KEY
+
+ANTHROPIC_BASE_URL=http://127.0.0.1:18080/anthropic \
+ANTHROPIC_CUSTOM_HEADERS="x-bf-vk: $BIFROST_VK_PERSONAL" \
+claude --model sonnet
+```
+
+If you wrap this in fish or Nix aliases, set `ANTHROPIC_CUSTOM_HEADERS` inside a
+function so `$BIFROST_VK_PERSONAL` is expanded before Claude Code starts.
+
+### Codex
+
+For Codex, configure Bifrost as an OpenAI-compatible provider and use the
+Virtual Key as the provider API key. Keep the key in `.env`, direnv, or another
+local secret mechanism; do not hard-code its value in checked-in config.
+
+Example `~/.codex/config.toml` fragment:
+
+```toml
+model_provider = "bifrost"
+model = "openai/gpt-4o-mini"
+
+[model_providers.bifrost]
+name = "Bifrost"
+base_url = "http://127.0.0.1:18080/v1"
+env_key = "BIFROST_VK_PERSONAL"
+wire_api = "responses"
+```
+
+Then run Codex from a shell where `BIFROST_VK_PERSONAL` is exported:
+
+```bash
+source .env
+# or: source ~/.config/bifrost-gauge/bifrost.env
+codex -m openai/gpt-4o-mini
+```
+
+Use a model name that is enabled in your Bifrost configuration.
+
 ## Change the Port
 
 Edit `.env`:
