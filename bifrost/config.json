@@ -30,7 +30,7 @@
   "governance": {
     "budgets": [
       {
-        "id": "budget-personal-daily-hard",
+        "id": "budget-personal-default",
         "virtual_key_id": "vk-personal",
         "max_limit": 10.0,
         "reset_duration": "1d",
@@ -49,8 +49,8 @@
     "virtual_keys": [
       {
         "id": "vk-personal",
-        "name": "personal-daily-budget",
-        "description": "Local personal key with a daily hard budget backstop.",
+        "name": "default-budget",
+        "description": "Local personal key with a default hard budget backstop.",
         "value": "env.BIFROST_VK_PERSONAL",
         "is_active": true,
         "rate_limit_id": "rl-personal-hourly",

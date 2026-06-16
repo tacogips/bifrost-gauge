@@ -49,7 +49,7 @@ Check the active hard budget:
 
 ```bash
 curl -fsS http://127.0.0.1:18080/api/governance/budgets \
-  | jq '.budgets[] | select(.id == "budget-personal-daily-hard")'
+  | jq '.budgets[] | select(.id == "budget-personal-default")'
 ```
 
 ## OpenAI API

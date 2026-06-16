@@ -24,7 +24,7 @@ Bifrost official links:
 
 - Bifrost running locally on `http://127.0.0.1:18080`
 - one local Virtual Key: `vk-personal`
-- one daily hard budget: `budget-personal-daily-hard`, currently `$10`
+- one default hard budget: `budget-personal-default`, currently `$10`
 - `bifrost-gauge`, a macOS menu bar app for budget status and controls
 
 Budget state is owned by Bifrost. `bifrost-gauge` only reads and updates Bifrost
@@ -77,7 +77,7 @@ Check the budget:
 
 ```bash
 curl -fsS http://127.0.0.1:18080/api/governance/budgets \
-  | jq '.budgets[] | select(.id == "budget-personal-daily-hard")'
+  | jq '.budgets[] | select(.id == "budget-personal-default")'
 ```
 
 ## 3. Run bifrost-gauge
