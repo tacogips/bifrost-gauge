@@ -50,7 +50,7 @@ tasks:
       - ./scripts/bifrost-compose.sh config {{.CLI_ARGS}}
 
   package-macos-app:
-    desc: Build the bifrost-gage macOS .app zip for Homebrew Cask releases, e.g. task package-macos-app -- 0.1.0
+    desc: Build the bifrost-gauge macOS .app zip for Homebrew Cask releases, e.g. task package-macos-app -- 0.1.0
     cmds:
       - ./scripts/package-macos-app.sh {{.CLI_ARGS}}
 

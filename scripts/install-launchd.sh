@@ -7,11 +7,10 @@ if [ "$(uname -s)" != "Darwin" ]; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-label="com.local.bifrost-gage.bifrost"
-legacy_label="com.local.ai-budget-manager.bifrost"
+label="com.local.bifrost-gauge.bifrost"
 template="$repo_root/launchd/$label.plist.template"
 launch_agents_dir="$HOME/Library/LaunchAgents"
-log_dir="${BIFROST_LAUNCHD_LOG_DIR:-$HOME/Library/Logs/bifrost-gage}"
+log_dir="${BIFROST_LAUNCHD_LOG_DIR:-$HOME/Library/Logs/bifrost-gauge}"
 bifrost_bin="${BIFROST_BIN:-}"
 
 if [ -z "$bifrost_bin" ]; then
@@ -43,8 +42,6 @@ sed \
   "$template" > "$plist"
 
 launchctl bootout "gui/$(id -u)" "$plist" >/dev/null 2>&1 || true
-launchctl bootout "gui/$(id -u)" "$launch_agents_dir/$legacy_label.plist" >/dev/null 2>&1 || true
-rm -f "$launch_agents_dir/$legacy_label.plist"
 launchctl bootstrap "gui/$(id -u)" "$plist"
 launchctl enable "gui/$(id -u)/$label"
 launchctl kickstart -k "gui/$(id -u)/$label"

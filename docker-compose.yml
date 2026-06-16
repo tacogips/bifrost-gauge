@@ -1,9 +1,9 @@
-name: bifrost-gage
+name: bifrost-gauge
 
 services:
   bifrost:
     image: maximhq/bifrost:${BIFROST_IMAGE_TAG:-latest}
-    container_name: bifrost-gage-bifrost
+    container_name: bifrost-gauge-bifrost
     restart: unless-stopped
     ports:
       - "${BIFROST_BIND_HOST:-127.0.0.1}:${BIFROST_PORT:-18080}:8080"

@@ -8,8 +8,8 @@ Usage:
 
 Builds a macOS app bundle release artifact for Homebrew Cask:
 
-  release/bifrost-gage_<version>_aarch64.app.zip
-  release/bifrost-gage_<version>_aarch64.app.zip.sha256
+  release/bifrost-gauge_<version>_aarch64.app.zip
+  release/bifrost-gauge_<version>_aarch64.app.zip.sha256
 
 The version may be passed as 0.1.0 or v0.1.0.
 USAGE
@@ -60,14 +60,14 @@ require_command ditto
 require_command shasum
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 release_dir="$repo_root/release"
-app_path="$release_dir/bifrost-gage.app"
-zip_path="$release_dir/bifrost-gage_${version}_aarch64.app.zip"
+app_path="$release_dir/bifrost-gauge.app"
+zip_path="$release_dir/bifrost-gauge_${version}_aarch64.app.zip"
 sha_path="$zip_path.sha256"
 icon_path="$repo_root/Resources/AppIcon.icns"
 required_swift_version="6.3.2"
-developer_dir="${BIFROST_GAGE_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-sdkroot="${BIFROST_GAGE_SDKROOT:-$developer_dir/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
-swift_bin="${BIFROST_GAGE_XCODE_SWIFT:-$developer_dir/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift}"
+developer_dir="${BIFROST_GAUGE_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+sdkroot="${BIFROST_GAUGE_SDKROOT:-$developer_dir/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
+swift_bin="${BIFROST_GAUGE_XCODE_SWIFT:-$developer_dir/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift}"
 
 if [ ! -x "$swift_bin" ]; then
   echo "error: Swift toolchain not found at $swift_bin" >&2
@@ -88,14 +88,14 @@ mkdir -p "$release_dir"
 
 DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" "$swift_bin" build -c release
 build_bin_dir="$(DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" "$swift_bin" build -c release --show-bin-path | tail -n 1)"
-executable_path="$build_bin_dir/bifrost-gage"
+executable_path="$build_bin_dir/bifrost-gauge"
 
 test -x "$executable_path"
 test -f "$icon_path"
 
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
-cp "$executable_path" "$app_path/Contents/MacOS/bifrost-gage"
-chmod 755 "$app_path/Contents/MacOS/bifrost-gage"
+cp "$executable_path" "$app_path/Contents/MacOS/bifrost-gauge"
+chmod 755 "$app_path/Contents/MacOS/bifrost-gauge"
 cp "$icon_path" "$app_path/Contents/Resources/AppIcon.icns"
 
 cat > "$app_path/Contents/Info.plist" <<EOF
@@ -107,15 +107,15 @@ cat > "$app_path/Contents/Info.plist" <<EOF
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleExecutable</key>
-  <string>bifrost-gage</string>
+  <string>bifrost-gauge</string>
   <key>CFBundleIdentifier</key>
-  <string>com.tacogips.bifrost-gage</string>
+  <string>com.tacogips.bifrost-gauge</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>bifrost-gage</string>
+  <string>bifrost-gauge</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

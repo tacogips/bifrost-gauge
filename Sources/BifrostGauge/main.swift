@@ -103,10 +103,6 @@ final class AppSettings {
         self.initial = initial
         self.configURL = Self.defaultConfigURL()
         self.state = Self.loadState(from: configURL)
-        for url in Self.legacyConfigURLs() where state.isEmpty {
-            state = Self.loadState(from: url)
-        }
-        migrateUserDefaultsIfNeeded()
         applyDefaults()
         persist()
     }
@@ -219,22 +215,8 @@ final class AppSettings {
     private static func defaultConfigURL() -> URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config", isDirectory: true)
-            .appendingPathComponent("bifrost-gage", isDirectory: true)
-            .appendingPathComponent("bifrost-gage-config.json")
-    }
-
-    private static func legacyConfigURLs() -> [URL] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return [
-            home
-                .appendingPathComponent(".local", isDirectory: true)
-                .appendingPathComponent("bitfrost-gage", isDirectory: true)
-                .appendingPathComponent("config.json"),
-            home
-                .appendingPathComponent(".config", isDirectory: true)
-                .appendingPathComponent("bifrost-gage", isDirectory: true)
-                .appendingPathComponent("config.json")
-        ]
+            .appendingPathComponent("bifrost-gauge", isDirectory: true)
+            .appendingPathComponent("bifrost-gauge-config.json")
     }
 
     private static func loadState(from url: URL) -> ConfigFileState {
@@ -258,29 +240,6 @@ final class AppSettings {
         }
     }
 
-    private func migrateUserDefaultsIfNeeded() {
-        guard !FileManager.default.fileExists(atPath: configURL.path) else {
-            return
-        }
-
-        let defaults = UserDefaults.standard
-        state.baseURL = state.baseURL ?? nonEmpty(defaults.string(forKey: "baseURL"))
-        state.virtualKeyID = state.virtualKeyID ?? nonEmpty(defaults.string(forKey: "virtualKeyID"))
-        state.resetDuration = state.resetDuration ?? nonEmpty(defaults.string(forKey: "resetDuration"))
-        state.adminToken = state.adminToken ?? nonEmpty(defaults.string(forKey: "adminToken"))
-        state.menuBarDisplayMode = state.menuBarDisplayMode ?? nonEmpty(defaults.string(forKey: "menuBarDisplayMode"))
-
-        let refreshSeconds = defaults.double(forKey: "refreshSeconds")
-        if state.refreshSeconds == nil, refreshSeconds > 0 {
-            state.refreshSeconds = refreshSeconds
-        }
-
-        let defaultRaiseAmount = defaults.double(forKey: "defaultRaiseAmount")
-        if state.defaultRaiseAmount == nil, defaultRaiseAmount > 0 {
-            state.defaultRaiseAmount = defaultRaiseAmount
-        }
-    }
-
     private func applyDefaults() {
         state.baseURL = state.baseURL ?? initial.baseURL.absoluteString
         state.virtualKeyID = state.virtualKeyID ?? initial.virtualKeyID
@@ -289,34 +248,6 @@ final class AppSettings {
         state.adminToken = state.adminToken ?? initial.adminToken
         state.defaultRaiseAmount = state.defaultRaiseAmount ?? 5.0
         state.menuBarDisplayMode = state.menuBarDisplayMode ?? MenuBarDisplayMode.pieAndPercent.rawValue
-        migrateBudgetScopedSettingsToVirtualKey()
-    }
-
-    private func migrateBudgetScopedSettingsToVirtualKey() {
-        guard let disabledBudgetLimits = state.disabledBudgetLimits else {
-            return
-        }
-
-        let virtualKeyID = stringOrInitial(state.virtualKeyID, initial.virtualKeyID)
-        let legacyKey = "virtual-key:\(virtualKeyID)"
-        let resetDuration = stringOrInitial(state.resetDuration, initial.resetDuration) ?? "1M"
-        let currentKey = Self.disabledBudgetLimitKey(virtualKeyID: virtualKeyID, budgetKey: "common:\(resetDuration)")
-        var migrated = disabledBudgetLimits.filter {
-            $0.key.hasPrefix("virtual-key:") &&
-                $0.key.split(separator: ":", omittingEmptySubsequences: false).count >= 4
-        }
-
-        if migrated[currentKey] == nil {
-            let legacyValues = disabledBudgetLimits
-                .filter { !$0.key.hasPrefix("virtual-key:") || $0.key == legacyKey }
-                .map(\.value)
-                .filter { $0 > 0 && $0 < Self.inactiveBudgetLimit }
-            if let savedLimit = legacyValues.min() {
-                migrated[currentKey] = savedLimit
-            }
-        }
-
-        state.disabledBudgetLimits = migrated.isEmpty ? nil : migrated
     }
 }
 
@@ -584,7 +515,7 @@ struct ProviderBudgetUpdatePayload: Encodable {
     }
 }
 
-enum BifrostGageError: LocalizedError {
+enum BifrostGaugeError: LocalizedError {
     case missingBudget
     case missingVirtualKey
     case httpStatus(Int, String)
@@ -626,11 +557,11 @@ final class BifrostClient: @unchecked Sendable {
                 return
             }
             guard let http = response as? HTTPURLResponse, let data else {
-                completion(.failure(BifrostGageError.invalidResponse))
+                completion(.failure(BifrostGaugeError.invalidResponse))
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
-                completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
+                completion(.failure(BifrostGaugeError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
                 return
             }
             do {
@@ -652,15 +583,15 @@ final class BifrostClient: @unchecked Sendable {
                 return
             }
             guard let self else {
-                completion(.failure(BifrostGageError.invalidResponse))
+                completion(.failure(BifrostGaugeError.invalidResponse))
                 return
             }
             guard let http = response as? HTTPURLResponse, let data else {
-                completion(.failure(BifrostGageError.invalidResponse))
+                completion(.failure(BifrostGaugeError.invalidResponse))
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
-                completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
+                completion(.failure(BifrostGaugeError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
                 return
             }
             do {
@@ -824,11 +755,11 @@ final class BifrostClient: @unchecked Sendable {
                     return
                 }
                 guard let http = response as? HTTPURLResponse else {
-                    completion(.failure(BifrostGageError.invalidResponse))
+                    completion(.failure(BifrostGaugeError.invalidResponse))
                     return
                 }
                 guard (200..<300).contains(http.statusCode) else {
-                    completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
+                    completion(.failure(BifrostGaugeError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
                     return
                 }
                 completion(.success(()))
@@ -888,11 +819,11 @@ final class BifrostClient: @unchecked Sendable {
                     return
                 }
                 guard let http = response as? HTTPURLResponse else {
-                    completion(.failure(BifrostGageError.invalidResponse))
+                    completion(.failure(BifrostGaugeError.invalidResponse))
                     return
                 }
                 guard (200..<300).contains(http.statusCode) else {
-                    completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
+                    completion(.failure(BifrostGaugeError.httpStatus(http.statusCode, String(data: data ?? Data(), encoding: .utf8) ?? "")))
                     return
                 }
                 completion(.success(()))
@@ -921,11 +852,11 @@ final class BifrostClient: @unchecked Sendable {
                 return
             }
             guard let http = response as? HTTPURLResponse, let data else {
-                completion(.failure(BifrostGageError.invalidResponse))
+                completion(.failure(BifrostGaugeError.invalidResponse))
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
-                completion(.failure(BifrostGageError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
+                completion(.failure(BifrostGaugeError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")))
                 return
             }
             do {
@@ -1410,7 +1341,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let selected = selectedRegisteredVirtualKey(from: virtualKeys) else {
                 currentVirtualKey = nil
                 currentTarget = nil
-                setError(BifrostGageError.missingVirtualKey.localizedDescription)
+                setError(BifrostGaugeError.missingVirtualKey.localizedDescription)
                 return
             }
             client.fetchVirtualKey(id: selected.id) { [weak self] result in
@@ -1444,7 +1375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentVirtualKey = virtualKey
             guard let target = client.selectedTarget(from: virtualKey) else {
                 currentTarget = nil
-                setError(BifrostGageError.missingBudget.localizedDescription)
+                setError(BifrostGaugeError.missingBudget.localizedDescription)
                 return
             }
             currentTarget = target
@@ -1859,19 +1790,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var launchAgentURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents/com.local.bifrost-gage.menubar.plist")
+            .appendingPathComponent("Library/LaunchAgents/com.local.bifrost-gauge.menubar.plist")
     }
 
     private func installLaunchAgent() throws {
         guard let executablePath = Bundle.main.executableURL?.path else {
-            throw BifrostGageError.invalidResponse
+            throw BifrostGaugeError.invalidResponse
         }
         let logDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/bifrost-gage")
+            .appendingPathComponent("Library/Logs/bifrost-gauge")
         try FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
 
         let payload: [String: Any] = [
-            "Label": "com.local.bifrost-gage.menubar",
+            "Label": "com.local.bifrost-gauge.menubar",
             "ProgramArguments": [executablePath],
             "EnvironmentVariables": [
                 "BIFROST_BASE_URL": settings.baseURL.absoluteString,
@@ -1881,8 +1812,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ],
             "RunAtLoad": true,
             "KeepAlive": true,
-            "StandardOutPath": logDir.appendingPathComponent("bifrost-gage-launchd.out.log").path,
-            "StandardErrorPath": logDir.appendingPathComponent("bifrost-gage-launchd.err.log").path,
+            "StandardOutPath": logDir.appendingPathComponent("bifrost-gauge-launchd.out.log").path,
+            "StandardErrorPath": logDir.appendingPathComponent("bifrost-gauge-launchd.err.log").path,
             "WorkingDirectory": FileManager.default.currentDirectoryPath
         ]
 

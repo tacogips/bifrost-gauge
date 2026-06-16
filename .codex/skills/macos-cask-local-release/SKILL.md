@@ -1,7 +1,7 @@
 ---
 name: macos-cask-local-release
 description: >-
-  Use when releasing bifrost-gage or another macOS Homebrew Cask from this repo,
+  Use when releasing bifrost-gauge or another macOS Homebrew Cask from this repo,
   especially when building app zip artifacts, handling Apple signing/notarization
   credentials, publishing GitHub release assets, or updating tacogips/homebrew-tap.
   Follows the chilla local-release model: Apple certificate material stays in the
@@ -37,7 +37,7 @@ security find-identity -v -p codesigning | grep -F -- "$APPLE_SIGNING_IDENTITY" 
 2. Build the app with Xcode Swift from `nix develop`; do not use Nixpkgs Swift.
 3. Ensure the app bundle contains:
    - `Contents/Info.plist`
-   - `Contents/MacOS/bifrost-gage`
+   - `Contents/MacOS/bifrost-gauge`
    - `Contents/Resources/AppIcon.icns`
    - `CFBundleIconFile` set to `AppIcon`
 4. For signed releases, sign with Developer ID from the local keychain, notarize with `xcrun notarytool`, staple, and validate:
@@ -50,12 +50,12 @@ spctl --assess --type execute --verbose=4 "$app_path"
 
 5. Zip with `ditto -c -k --keepParent`.
 6. Publish the asset to a public release location usable by Homebrew. If the source repo is private, host the Cask asset in `tacogips/homebrew-tap` releases.
-7. Update `Casks/bifrost-gage.rb` with the new version, URL, and SHA.
+7. Update `Casks/bifrost-gauge.rb` with the new version, URL, and SHA.
 8. Verify:
 
 ```bash
-brew fetch --cask tacogips/tap/bifrost-gage
-HOMEBREW_NO_GITHUB_API=1 brew audit --cask tacogips/tap/bifrost-gage
+brew fetch --cask tacogips/tap/bifrost-gauge
+HOMEBREW_NO_GITHUB_API=1 brew audit --cask tacogips/tap/bifrost-gauge
 ```
 
 ## Safety Gates

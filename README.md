@@ -1,14 +1,14 @@
-# bifrost-gage
+# bifrost-gauge
 
 Local Bifrost setup for LLM budget management, plus a macOS menu bar app that
 shows and edits the current budget.
 
-## Install bifrost-gage
+## Install bifrost-gauge
 
 ```bash
 brew tap tacogips/tap
-brew install --cask bifrost-gage
-open -a bifrost-gage
+brew install --cask bifrost-gauge
+open -a bifrost-gauge
 ```
 
 This installs the macOS menu bar app. Bifrost itself still needs to be running
@@ -25,16 +25,16 @@ Bifrost official links:
 - Bifrost running locally on `http://127.0.0.1:18080`
 - one local Virtual Key: `vk-personal`
 - one daily hard budget: `budget-personal-daily-hard`, currently `$10`
-- `bifrost-gage`, a macOS menu bar app for budget status and controls
+- `bifrost-gauge`, a macOS menu bar app for budget status and controls
 
-Budget state is owned by Bifrost. `bifrost-gage` only reads and updates Bifrost
+Budget state is owned by Bifrost. `bifrost-gauge` only reads and updates Bifrost
 through its governance API.
 
 ## Requirements
 
 - macOS
 - Nix
-- Xcode 26.5 with Swift 6.3.2 for building `bifrost-gage`
+- Xcode 26.5 with Swift 6.3.2 for building `bifrost-gauge`
 - at least one provider API key, for example `OPENAI_API_KEY` or
   `ANTHROPIC_API_KEY`
 
@@ -80,16 +80,16 @@ curl -fsS http://127.0.0.1:18080/api/governance/budgets \
   | jq '.budgets[] | select(.id == "budget-personal-daily-hard")'
 ```
 
-## 3. Run bifrost-gage
+## 3. Run bifrost-gauge
 
 ```bash
-swift run bifrost-gage
+swift run bifrost-gauge
 ```
 
 The app stores user-editable settings here:
 
 ```text
-~/.config/bifrost-gage/bifrost-gage-config.json
+~/.config/bifrost-gauge/bifrost-gauge-config.json
 ```
 
 Use the menu bar item to change:
@@ -113,14 +113,14 @@ scripts/install-launchd.sh
 Check status:
 
 ```bash
-launchctl print "gui/$(id -u)/com.local.bifrost-gage.bifrost"
+launchctl print "gui/$(id -u)/com.local.bifrost-gauge.bifrost"
 ```
 
 Logs:
 
 ```text
-~/Library/Logs/bifrost-gage/bifrost-host-launchd.out.log
-~/Library/Logs/bifrost-gage/bifrost-host-launchd.err.log
+~/Library/Logs/bifrost-gauge/bifrost-host-launchd.out.log
+~/Library/Logs/bifrost-gauge/bifrost-host-launchd.err.log
 ```
 
 Uninstall:
@@ -132,7 +132,7 @@ scripts/uninstall-launchd.sh
 The generated plist is based on:
 
 ```text
-launchd/com.local.bifrost-gage.bifrost.plist.template
+launchd/com.local.bifrost-gauge.bifrost.plist.template
 ```
 
 ## Change the Port
@@ -150,7 +150,7 @@ Then restart Bifrost. If using launchd, rerun:
 scripts/install-launchd.sh
 ```
 
-Also update `bifrost-gage`:
+Also update `bifrost-gauge`:
 
 ```json
 {
@@ -161,7 +161,7 @@ Also update `bifrost-gage`:
 in:
 
 ```text
-~/.config/bifrost-gage/bifrost-gage-config.json
+~/.config/bifrost-gauge/bifrost-gauge-config.json
 ```
 
 ## Test a Request
@@ -181,9 +181,9 @@ curl -fsS http://127.0.0.1:18080/v1/chat/completions \
 ## More Details
 
 - Vendor-specific setup: [docs/vendor-setup.md](docs/vendor-setup.md)
-- macOS daemon, plist example, and gage config:
-  [docs/macos-launchd-and-gage.md](docs/macos-launchd-and-gage.md)
-- macOS app details: [docs/bifrost-gage.md](docs/bifrost-gage.md)
+- macOS daemon, plist example, and gauge config:
+  [docs/macos-launchd-and-gauge.md](docs/macos-launchd-and-gauge.md)
+- macOS app details: [docs/bifrost-gauge.md](docs/bifrost-gauge.md)
 
 ## License
 

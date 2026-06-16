@@ -376,9 +376,9 @@ The same shape applies to other supported Bifrost providers such as `mistral`,
 `groq`, `cerebras`, `cohere`, `perplexity`, `xai`, `ollama`, `huggingface`,
 `nebius`, `parasail`, `replicate`, `vllm`, and `sgl`.
 
-## Budgets in bifrost-gage
+## Budgets in bifrost-gauge
 
-`bifrost-gage` treats the selected Bifrost Virtual Key as the budget scope. The
+`bifrost-gauge` treats the selected Bifrost Virtual Key as the budget scope. The
 menu edits Virtual Key level budgets and does not expose provider-specific
 budget controls. Use separate Virtual Keys when you want separate Codex, Claude,
 or other client budgets.

@@ -1,7 +1,7 @@
-# macOS launchd and bifrost-gage Setup
+# macOS launchd and bifrost-gauge Setup
 
 This guide covers running Bifrost as a macOS LaunchAgent and configuring the
-`bifrost-gage` menu bar app.
+`bifrost-gauge` menu bar app.
 
 ## Bifrost LaunchAgent
 
@@ -14,12 +14,12 @@ scripts/install-launchd.sh
 The installer:
 
 - builds the pinned Bifrost binary with Nix
-- writes `~/Library/LaunchAgents/com.local.bifrost-gage.bifrost.plist`
+- writes `~/Library/LaunchAgents/com.local.bifrost-gauge.bifrost.plist`
 - starts the agent immediately
 - keeps it alive with launchd
 
 The generated plist is based on
-`launchd/com.local.bifrost-gage.bifrost.plist.template`.
+`launchd/com.local.bifrost-gauge.bifrost.plist.template`.
 
 ## Plist Example
 
@@ -63,14 +63,14 @@ scripts/install-launchd.sh
 Check status:
 
 ```bash
-launchctl print "gui/$(id -u)/com.local.bifrost-gage.bifrost"
+launchctl print "gui/$(id -u)/com.local.bifrost-gauge.bifrost"
 ```
 
 Read logs:
 
 ```bash
-tail -f ~/Library/Logs/bifrost-gage/bifrost-host-launchd.out.log
-tail -f ~/Library/Logs/bifrost-gage/bifrost-host-launchd.err.log
+tail -f ~/Library/Logs/bifrost-gauge/bifrost-host-launchd.out.log
+tail -f ~/Library/Logs/bifrost-gauge/bifrost-host-launchd.err.log
 ```
 
 Uninstall:
@@ -93,12 +93,12 @@ To bypass the pinned Nix binary:
 BIFROST_BIN=/absolute/path/to/bifrost-http scripts/install-launchd.sh
 ```
 
-## bifrost-gage Config File
+## bifrost-gauge Config File
 
-`bifrost-gage` stores user-editable settings in:
+`bifrost-gauge` stores user-editable settings in:
 
 ```text
-~/.config/bifrost-gage/bifrost-gage-config.json
+~/.config/bifrost-gauge/bifrost-gauge-config.json
 ```
 
 The app creates the directory and file automatically. Changes made through the
@@ -132,7 +132,7 @@ Optional keys:
 }
 ```
 
-## bifrost-gage URL Settings
+## bifrost-gauge URL Settings
 
 There are four ways to configure the Bifrost URL. Saved JSON config wins over
 environment defaults, matching the app's previous persistent-settings behavior.
@@ -149,13 +149,13 @@ Use environment variables for first-run/default values:
 
 ```bash
 BIFROST_BASE_URL=http://127.0.0.1:18080 \
-swift run bifrost-gage
+swift run bifrost-gauge
 ```
 
 Use CLI flags for first-run/default values:
 
 ```bash
-swift run bifrost-gage -- \
+swift run bifrost-gauge -- \
   --base-url http://127.0.0.1:18080
 ```
 
@@ -171,7 +171,7 @@ The Virtual Key menu is populated from `GET /api/governance/virtual-keys`.
 the app menu switches only between Virtual Keys already registered in Bifrost.
 
 Menu changes are saved to
-`~/.config/bifrost-gage/bifrost-gage-config.json`.
+`~/.config/bifrost-gauge/bifrost-gauge-config.json`.
 
 Use `Bifrost Budget Reset` in the menu to update the selected Bifrost budget's
 `reset_duration` and the Virtual Key `calendar_aligned` flag. The app sends
@@ -198,7 +198,7 @@ BIFROST_PORT=18081
 }
 ```
 
-Then restart Bifrost and refresh `bifrost-gage`.
+Then restart Bifrost and refresh `bifrost-gauge`.
 
 ## Allow Over-Budget Requests
 
@@ -206,7 +206,7 @@ Bifrost governance enforces budgets. When an active budget's usage exceeds
 `max_limit`, Bifrost rejects inference with a budget exceeded error. This is the
 hard backstop that protects the upstream provider account.
 
-`bifrost-gage` exposes this as:
+`bifrost-gauge` exposes this as:
 
 ```text
 Allow Over-Budget Requests: Off
@@ -218,7 +218,7 @@ Bifrost does not currently expose a per-budget `is_active` field in
 `config.json`, so On mode is implemented by:
 
 1. Saving the current Virtual Key budget's original `max_limit` in
-   `~/.config/bifrost-gage/bifrost-gage-config.json` under
+   `~/.config/bifrost-gauge/bifrost-gauge-config.json` under
    `disabledBudgetLimits` as `virtual-key:<vk_id>`.
 2. Updating the Bifrost budget through
    `PUT /api/governance/virtual-keys/{vk_id}` with a local high-water

@@ -1,11 +1,11 @@
-# bifrost-gage
+# bifrost-gauge
 
 Small macOS menu bar app for local Bifrost budget status and controls.
 
 ## Run
 
 ```bash
-swift run bifrost-gage -- \
+swift run bifrost-gauge -- \
   --base-url http://127.0.0.1:18080
 ```
 
@@ -14,7 +14,7 @@ Environment variables are also supported:
 ```bash
 export BIFROST_BASE_URL=http://127.0.0.1:18080
 export BIFROST_REFRESH_SECONDS=10
-swift run bifrost-gage
+swift run bifrost-gauge
 ```
 
 The menu bar budget scope is the selected Bifrost Virtual Key. The Virtual Key
@@ -27,7 +27,7 @@ budget returned by Bifrost.
 Persistent settings are stored in:
 
 ```text
-~/.config/bifrost-gage/bifrost-gage-config.json
+~/.config/bifrost-gauge/bifrost-gauge-config.json
 ```
 
 Menu changes such as Bifrost URL, Virtual Key selection, budget window
@@ -50,7 +50,7 @@ Example:
 }
 ```
 
-See [macOS launchd and bifrost-gage Setup](macos-launchd-and-gage.md)
+See [macOS launchd and bifrost-gauge Setup](macos-launchd-and-gauge.md)
 for LaunchAgent setup, port changes, and URL configuration.
 
 ## Menu Controls
@@ -73,7 +73,7 @@ Click the menu bar item to:
 - edit the Bifrost base URL from Bifrost Settings
 - toggle "Launch at Login"; the app writes or removes its own LaunchAgent
 
-Bifrost owns reset scheduling. `bifrost-gage` updates each budget's
+Bifrost owns reset scheduling. `bifrost-gauge` updates each budget's
 `reset_duration` and the Virtual Key's `calendar_aligned` setting through the
 Bifrost governance API; it does not evaluate local daily, weekly, monthly, or
 cron reset schedules at fetch time. When `calendar_aligned` is enabled, Bifrost

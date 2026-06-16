@@ -1,5 +1,5 @@
 {
-  description = "bifrost-gage local Bifrost budget manager";
+  description = "bifrost-gauge local Bifrost budget manager";
 
   inputs = {
     ccusage.url = "github:ryoppippi/ccusage";
@@ -103,21 +103,21 @@
             ];
 
             shellHook = ''
-              export BIFROST_GAGE_DEVELOPER_DIR="''${BIFROST_GAGE_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-              export BIFROST_GAGE_SDKROOT="''${BIFROST_GAGE_SDKROOT:-$BIFROST_GAGE_DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
-              export DEVELOPER_DIR="$BIFROST_GAGE_DEVELOPER_DIR"
-              export SDKROOT="$BIFROST_GAGE_SDKROOT"
-              export BIFROST_GAGE_XCODE_TOOLCHAIN_DIR="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin"
-              export BIFROST_GAGE_XCODE_SWIFT="$BIFROST_GAGE_XCODE_TOOLCHAIN_DIR/swift"
+              export BIFROST_GAUGE_DEVELOPER_DIR="''${BIFROST_GAUGE_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+              export BIFROST_GAUGE_SDKROOT="''${BIFROST_GAUGE_SDKROOT:-$BIFROST_GAUGE_DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
+              export DEVELOPER_DIR="$BIFROST_GAUGE_DEVELOPER_DIR"
+              export SDKROOT="$BIFROST_GAUGE_SDKROOT"
+              export BIFROST_GAUGE_XCODE_TOOLCHAIN_DIR="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin"
+              export BIFROST_GAUGE_XCODE_SWIFT="$BIFROST_GAUGE_XCODE_TOOLCHAIN_DIR/swift"
 
-              if [ ! -x "$BIFROST_GAGE_XCODE_SWIFT" ]; then
-                echo "error: Xcode Swift ${xcodeSwiftVersion} not found at $BIFROST_GAGE_XCODE_SWIFT" >&2
-                echo "Install/select Xcode 26.5, or set BIFROST_GAGE_DEVELOPER_DIR." >&2
+              if [ ! -x "$BIFROST_GAUGE_XCODE_SWIFT" ]; then
+                echo "error: Xcode Swift ${xcodeSwiftVersion} not found at $BIFROST_GAUGE_XCODE_SWIFT" >&2
+                echo "Install/select Xcode 26.5, or set BIFROST_GAUGE_DEVELOPER_DIR." >&2
                 return 1
               fi
 
-              export PATH="$BIFROST_GAGE_XCODE_TOOLCHAIN_DIR:$PATH"
-              xcode_swift_version="$("$BIFROST_GAGE_XCODE_SWIFT" --version 2>/dev/null | head -n 1 || true)"
+              export PATH="$BIFROST_GAUGE_XCODE_TOOLCHAIN_DIR:$PATH"
+              xcode_swift_version="$("$BIFROST_GAUGE_XCODE_SWIFT" --version 2>/dev/null | head -n 1 || true)"
               case "$xcode_swift_version" in
                 *"Apple Swift version ${xcodeSwiftVersion}"*|*"Swift version ${xcodeSwiftVersion}"*) ;;
                 *)
@@ -128,7 +128,7 @@
 
               echo "Bifrost local tools are available."
               echo "Swift version: $xcode_swift_version"
-              echo "Swift toolchain: $BIFROST_GAGE_XCODE_TOOLCHAIN_DIR"
+              echo "Swift toolchain: $BIFROST_GAUGE_XCODE_TOOLCHAIN_DIR"
               echo "Run: nix run .#bifrost-host"
               echo "Check config: nix run .#bifrost-check"
               echo "Usage reports: task ccusage:daily"
