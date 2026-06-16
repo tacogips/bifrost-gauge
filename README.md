@@ -59,6 +59,13 @@ Generate the encryption key:
 openssl rand -base64 32
 ```
 
+`BIFROST_VK_PERSONAL` is not an upstream provider credential, but it should
+still be treated as secret material. It is a local capability token for this
+Bifrost instance: anyone who can reach the local Bifrost endpoint and has this
+key can spend against the associated budget and rate limits. Keep it in `.env`,
+direnv, or a secret store such as kinko, and avoid hard-coding it into checked-in
+client config.
+
 ## 2. Start Bifrost
 
 Run it in the foreground:

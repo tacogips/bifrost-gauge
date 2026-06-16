@@ -15,6 +15,12 @@ Bifrost has two separate credential layers:
 Do not put provider API keys in client apps. Clients should talk to Bifrost and
 send the Virtual Key.
 
+Treat the Virtual Key as a secret even though it is not an upstream provider
+credential. It is a local capability token: anyone who can reach this Bifrost
+instance and has the key can spend against the associated local budget and rate
+limits. Keep it in `.env`, direnv, or a secret store such as kinko, and do not
+hard-code it into checked-in client configuration.
+
 ## Common Setup
 
 Create `.env` from the template:
