@@ -156,8 +156,7 @@ examples/nix-darwin-bifrost-gauge.nix
 ```
 
 The sample installs the app through Cask and runs Bifrost from this repository's
-pinned Nix package. It does not require a local clone at runtime and does not
-depend on kinko. It reads Bifrost secrets from:
+pinned Nix package. It does not depend on kinko. It reads Bifrost secrets from:
 
 ```text
 ~/.config/bifrost-gauge/bifrost.env
