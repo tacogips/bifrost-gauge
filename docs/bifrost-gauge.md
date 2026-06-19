@@ -32,7 +32,7 @@ Persistent settings are stored in:
 
 Menu changes such as Bifrost URL, Virtual Key selection, budget window
 selection, menu bar display mode, refresh period, default raise
-amount, and disabled budget enforcement restore values are written back to that
+amount, and saved budget limit restore values are written back to that
 JSON file. Budget reset timing is Bifrost state, not local app cron state.
 
 Example:
@@ -68,7 +68,7 @@ Click the menu bar item to:
 - raise the selected budget by a custom dollar amount from Budget Actions
 - set the selected budget limit from Budget Settings
 - select one budget window within the current Virtual Key from Budget Settings
-- turn Allow Over-Budget Requests on or off from Budget Settings
+- restore a saved budget limit from Budget Settings when an older app version changed it
 - set the default raise amount from Budget Settings
 - set the selected Bifrost budget `reset_duration` from Budget Settings
 - toggle Bifrost `calendar_aligned` resets from Budget Settings
@@ -93,17 +93,15 @@ separate Codex, Claude, or other client budgets.
 Refresh loads the selected Virtual Key and then fetches
 `/api/governance/budgets`. When both responses contain the same budget, the app
 keeps the Virtual Key budget definition and overlays the latest
-`current_usage`, so the menu bar usage indicator is always calculated from the
-current budget limit and current spend. If the usage fetch fails, refresh shows
-an error instead of rendering potentially stale usage.
+`current_usage`, so the menu bar usage indicator is calculated from the current
+budget limit and current spend. If the usage fetch fails, refresh shows an error
+instead of rendering potentially stale usage.
 
 When a Bifrost budget is active, Bifrost returns an error after usage exceeds
-`max_limit`. The menu item `Allow Over-Budget Requests` controls whether those
-over-budget requests keep going for the current Virtual Key. On mode keeps the
-Bifrost budget entry but raises `max_limit` to a local high-water value and
-stores the original limit in `disabledBudgetLimits` under
-`virtual-key:<vk_id>:common:<reset_duration>`. Switching it Off restores the
-saved limit only for the selected window.
+`max_limit`. `bifrost-gauge` does not change `max_limit` to bypass this
+enforcement. Older app versions could store an original limit in
+`disabledBudgetLimits` after raising `max_limit`; the Budget Settings menu keeps
+a restore action for those legacy entries.
 
 ## Reset and Raise
 

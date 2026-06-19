@@ -143,7 +143,8 @@ struct AppConfig {
 }
 
 final class AppSettings {
-    static let inactiveBudgetLimit = 1_000_000_000.0
+    static let legacyHighWaterBudgetLimit = 1_000_000_000.0
+
     static func disabledBudgetLimitKey(virtualKeyID: String, budgetKey: String) -> String {
         "virtual-key:\(virtualKeyID):\(budgetKey)"
     }
@@ -1028,7 +1029,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let raiseCustomItem = NSMenuItem(title: "Raise Budget...", action: #selector(raiseBudgetCustom), keyEquivalent: "=")
     private let budgetSettingsItem = NSMenuItem(title: "Budget Settings", action: nil, keyEquivalent: "")
     private let setBudgetLimitItem = NSMenuItem(title: "Set Budget Limit...", action: #selector(setSelectedBudgetLimit), keyEquivalent: "l")
-    private let budgetEnforcementItem = NSMenuItem(title: "", action: #selector(toggleBudgetEnforcement), keyEquivalent: "")
+    private let budgetEnforcementItem = NSMenuItem(title: "", action: #selector(restoreSavedBudgetLimit), keyEquivalent: "")
     private let setDefaultRaiseAmountItem = NSMenuItem(title: "Set Default Raise Amount...", action: #selector(setDefaultRaiseAmount), keyEquivalent: "d")
     private let calendarAlignedItem = NSMenuItem(title: "Calendar Aligned Resets", action: #selector(toggleCalendarAligned), keyEquivalent: "")
     private let virtualKeyItem = NSMenuItem(title: "Virtual Key", action: nil, keyEquivalent: "")
@@ -1242,42 +1243,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func toggleBudgetEnforcement() {
+    @objc private func restoreSavedBudgetLimit() {
         guard let virtualKey = currentVirtualKey, let target = currentTarget else {
-            showAlert(title: "Budget is not loaded", message: "Refresh Bifrost budget data before toggling enforcement.")
+            showAlert(title: "Budget is not loaded", message: "Refresh Bifrost budget data before restoring the limit.")
+            return
+        }
+        guard let savedLimit = settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key) else {
+            showAlert(
+                title: "No saved limit",
+                message: "bifrost-gauge no longer changes max_limit to allow over-budget requests. Configure Bifrost itself if you need a non-blocking over-budget policy."
+            )
             return
         }
 
-        let savedLimit = settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key)
-        let nextLimit = savedLimit ?? AppSettings.inactiveBudgetLimit
-        let enabling = savedLimit != nil
-
-        if !enabling {
-            let alert = NSAlert()
-            alert.messageText = "Allow over-budget requests?"
-            alert.informativeText = "This keeps the budget entry but raises max_limit to a local high-water value, so Bifrost will not block requests after the current limit is reached. The current limit is saved and can be restored from this menu."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Allow")
-            alert.addButton(withTitle: "Cancel")
-            guard alert.runModal() == .alertFirstButtonReturn else {
-                return
-            }
-        }
-
         setActionsEnabled(false)
-        client.setBudgetLimit(virtualKey: virtualKey, target: target, maxLimit: nextLimit) { [weak self] result in
+        client.setBudgetLimit(virtualKey: virtualKey, target: target, maxLimit: savedLimit) { [weak self] result in
             DispatchQueue.main.async {
                 self?.setActionsEnabled(true)
                 switch result {
                 case .success:
-                    if enabling {
-                        self?.settings.setDisabledBudgetLimit(nil, forVirtualKeyID: virtualKey.id, budgetKey: target.key)
-                    } else {
-                        self?.settings.setDisabledBudgetLimit(target.budget.maxLimit, forVirtualKeyID: virtualKey.id, budgetKey: target.key)
-                    }
+                    self?.settings.setDisabledBudgetLimit(nil, forVirtualKeyID: virtualKey.id, budgetKey: target.key)
                     self?.refresh()
                 case .failure(let error):
-                    self?.showAlert(title: "Budget enforcement update failed", message: error.localizedDescription)
+                    self?.showAlert(title: "Budget limit restore failed", message: error.localizedDescription)
                     self?.refresh()
                 }
             }
@@ -1594,24 +1582,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateMenu(virtualKey: VirtualKey, target: BudgetTarget) {
         let budget = target.budget
-        let ratio = budget.maxLimit > 0 ? budget.currentUsage / budget.maxLimit : 0
+        let savedLimit = settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key)
+        let savedDisplayLimit = savedLimit.flatMap { $0 > 0 ? $0 : nil }
+        let displayMaxLimit = isLegacyHighWaterLimit(budget.maxLimit) ? (savedDisplayLimit ?? budget.maxLimit) : budget.maxLimit
+        let ratio = displayMaxLimit > 0 ? budget.currentUsage / displayMaxLimit : 0
         let percentage = min(999, ratio * 100)
-        let remaining = max(0, budget.maxLimit - budget.currentUsage)
+        let remaining = max(0, displayMaxLimit - budget.currentUsage)
         updateStatusDisplay(percentage: percentage, ratio: ratio, spendAmount: budget.currentUsage)
         summaryItem.title = "\(virtualKey.name ?? virtualKey.id) / \(target.title)"
-        if settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key) != nil {
-            usageItem.title = String(
-                format: "$%.2f used / over-budget requests allowed / original limit saved",
-                budget.currentUsage
-            )
-        } else {
-            usageItem.title = String(
-                format: "$%.2f used / $%.2f limit / $%.2f left",
-                budget.currentUsage,
-                budget.maxLimit,
-                remaining
-            )
-        }
+        usageItem.title = String(
+            format: "$%.2f used / $%.2f limit / $%.2f left",
+            budget.currentUsage,
+            displayMaxLimit,
+            remaining
+        )
         updateStaticMenuState()
     }
 
@@ -1762,12 +1746,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func budgetEnforcementDescription() -> String {
         guard let target = currentTarget, let virtualKey = currentVirtualKey else {
-            return "Allow Over-Budget Requests: Unavailable"
+            return "Restore Saved Budget Limit: Unavailable"
         }
-        if settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key) != nil {
-            return "Allow Over-Budget Requests: On (Off restores saved limit)"
+        if hasSavedBudgetLimit(virtualKey: virtualKey, target: target) {
+            return "Restore Saved Budget Limit..."
         }
-        return "Allow Over-Budget Requests: Off"
+        return "Restore Saved Budget Limit: None"
+    }
+
+    private func hasSavedBudgetLimit(virtualKey: VirtualKey?, target: BudgetTarget?) -> Bool {
+        guard let virtualKey, let target else {
+            return false
+        }
+        return settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key) != nil
+    }
+
+    private func isLegacyHighWaterLimit(_ maxLimit: Double) -> Bool {
+        maxLimit >= AppSettings.legacyHighWaterBudgetLimit
     }
 
     private func virtualKeyDisplayName() -> String {
@@ -1824,7 +1819,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         raiseCustomItem.isEnabled = enabled
         setBudgetLimitItem.isEnabled = enabled && currentTarget != nil
         displayedBudgetMenuItem.isEnabled = enabled && currentVirtualKey != nil
-        budgetEnforcementItem.isEnabled = enabled && currentTarget != nil
+        budgetEnforcementItem.isEnabled = enabled && hasSavedBudgetLimit(virtualKey: currentVirtualKey, target: currentTarget)
         setDefaultRaiseAmountItem.isEnabled = enabled
         calendarAlignedItem.isEnabled = enabled && currentTarget != nil
     }

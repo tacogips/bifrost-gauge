@@ -104,7 +104,7 @@ BIFROST_BIN=/absolute/path/to/bifrost-http scripts/install-launchd.sh
 The app creates the directory and file automatically. Changes made through the
 menu bar app, including Bifrost URL changes, Virtual Key selection, budget
 window selection, display mode, budget usage refresh interval, default raise
-amount, and disabled budget enforcement restore values, are written back to this
+amount, and saved budget limit restore values, are written back to this
 JSON file. Budget reset timing remains Bifrost state and is not stored as local
 app cron state.
 
@@ -205,34 +205,29 @@ BIFROST_PORT=18081
 
 Then restart Bifrost and refresh `bifrost-gauge`.
 
-## Allow Over-Budget Requests
+## Saved Budget Limit Restore
 
 Bifrost governance enforces budgets. When an active budget's usage exceeds
 `max_limit`, Bifrost rejects inference with a budget exceeded error. This is the
 hard backstop that protects the upstream provider account.
 
-`bifrost-gauge` exposes this as:
+`bifrost-gauge` does not change a budget's `max_limit` to allow over-budget
+requests. The budget remains the budget. Configure Bifrost itself if you need a
+non-blocking over-budget policy.
+
+Older `bifrost-gauge` versions implemented a local workaround by raising
+`max_limit` to a high-water value and saving the original value in
+`disabledBudgetLimits`. Current versions only expose a restore action for those
+legacy entries:
 
 ```text
-Allow Over-Budget Requests: Off
-Allow Over-Budget Requests: On (Off restores saved limit)
-Allow Over-Budget Requests: Unavailable
+Restore Saved Budget Limit: None
+Restore Saved Budget Limit...
+Restore Saved Budget Limit: Unavailable
 ```
 
-Bifrost does not currently expose a per-budget `is_active` field in
-`config.json`, so On mode is implemented by:
-
-1. Saving the current Virtual Key budget's original `max_limit` in
-   `~/.config/bifrost-gauge/bifrost-gauge-config.json` under
-   `disabledBudgetLimits` as `virtual-key:<vk_id>`.
-2. Updating the Bifrost budget through
-   `PUT /api/governance/virtual-keys/{vk_id}` with a local high-water
-   `max_limit` and `reset_budget_usage=false`. The budget update object omits
-   `id` and lets Bifrost reconcile the selected reset window while preserving
-   current usage.
-3. Restoring the saved `max_limit` when the menu item is switched back Off.
-
-This keeps the Bifrost budget entry visible to the menu bar app while disabling
-the hard budget exceeded error for the current Virtual Key.
+When a saved limit exists, choosing `Restore Saved Budget Limit...` sends that
+saved `max_limit` back through `PUT /api/governance/virtual-keys/{vk_id}` with
+`reset_budget_usage=false`, then removes the local saved value.
 `Unavailable` means the app has not loaded a Virtual Key budget yet, so the
-toggle cannot decide which budget to update.
+menu cannot decide which budget to update.

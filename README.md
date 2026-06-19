@@ -113,7 +113,7 @@ Use the menu bar item to change:
 - Bifrost budget reset duration and calendar alignment
 - budget usage refresh interval
 - default raise amount
-- Allow Over-Budget Requests on/off
+- restore a saved budget limit if an older app version changed it
 
 ## 4. Run Bifrost as a macOS Daemon
 
