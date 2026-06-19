@@ -227,8 +227,9 @@ Bifrost does not currently expose a per-budget `is_active` field in
    `disabledBudgetLimits` as `virtual-key:<vk_id>`.
 2. Updating the Bifrost budget through
    `PUT /api/governance/virtual-keys/{vk_id}` with a local high-water
-   `max_limit`. The budget update object omits `id` and lets Bifrost reconcile
-   the selected reset window.
+   `max_limit` and `reset_budget_usage=false`. The budget update object omits
+   `id` and lets Bifrost reconcile the selected reset window while preserving
+   current usage.
 3. Restoring the saved `max_limit` when the menu item is switched back Off.
 
 This keeps the Bifrost budget entry visible to the menu bar app while disabling

@@ -546,7 +546,7 @@ struct ProviderConfigUpdate: Encodable {
 
 struct BudgetUpdatePayload: Encodable {
     let budgets: [BudgetUpdate]
-    let resetBudgetUsage: Bool?
+    let resetBudgetUsage: Bool
     let calendarAligned: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -558,7 +558,7 @@ struct BudgetUpdatePayload: Encodable {
 
 struct ProviderBudgetUpdatePayload: Encodable {
     let providerConfigs: [ProviderConfigUpdate]
-    let resetBudgetUsage: Bool?
+    let resetBudgetUsage: Bool
     let calendarAligned: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -653,8 +653,8 @@ final class BifrostClient: @unchecked Sendable {
                     switch budgetsResult {
                     case .success(let budgets):
                         completion(.success(self.merging(budgets: budgets, into: virtualKey)))
-                    case .failure:
-                        completion(.success(virtualKey))
+                    case .failure(let error):
+                        completion(.failure(error))
                     }
                 }
             } catch {
@@ -683,14 +683,14 @@ final class BifrostClient: @unchecked Sendable {
                 let shouldUpdate = budgetMatches(budget, target.budget)
                 return BudgetUpdate(maxLimit: shouldUpdate ? maxLimit : budget.maxLimit, resetDuration: budget.resetDuration)
             }
-            updateCommonBudgetPayload(budgets: updates, resetUsage: nil, calendarAligned: virtualKey.calendarAligned, completion: completion)
+            updateCommonBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { budgets in
                 budgets.map { budget in
                     let shouldUpdate = budgetUpdateMatches(budget, target.budget)
                     return BudgetUpdate(maxLimit: shouldUpdate ? maxLimit : budget.maxLimit, resetDuration: budget.resetDuration)
                 }
-            }, resetUsage: nil, completion: completion)
+            }, resetUsage: false, completion: completion)
         }
     }
 
@@ -704,7 +704,7 @@ final class BifrostClient: @unchecked Sendable {
                     resetDuration: shouldUpdate ? resetDuration : budget.resetDuration
                 )
             }
-            updateCommonBudgetPayload(budgets: updates, resetUsage: nil, calendarAligned: virtualKey.calendarAligned, completion: completion)
+            updateCommonBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { budgets in
                 budgets.map { budget in
@@ -714,7 +714,7 @@ final class BifrostClient: @unchecked Sendable {
                         resetDuration: shouldUpdate ? resetDuration : budget.resetDuration
                     )
                 }
-            }, resetUsage: nil, completion: completion)
+            }, resetUsage: false, completion: completion)
         }
     }
 
@@ -724,7 +724,7 @@ final class BifrostClient: @unchecked Sendable {
             updateCommonBudgets(
                 virtualKey: virtualKey,
                 budgets: virtualKey.budgets,
-                resetUsage: nil,
+                resetUsage: false,
                 calendarAligned: calendarAligned,
                 completion: completion
             )
@@ -733,7 +733,7 @@ final class BifrostClient: @unchecked Sendable {
                 virtualKey: virtualKey,
                 provider: provider,
                 transform: { $0 },
-                resetUsage: nil,
+                resetUsage: false,
                 calendarAligned: calendarAligned,
                 completion: completion
             )
@@ -749,7 +749,7 @@ final class BifrostClient: @unchecked Sendable {
                 updates.append(BudgetUpdate(maxLimit: maxLimit, resetDuration: resetDuration))
             }
             return updates
-        }, resetUsage: nil, completion: completion)
+        }, resetUsage: false, completion: completion)
     }
 
     func selectedTarget(from virtualKey: VirtualKey) -> BudgetTarget? {
@@ -773,7 +773,7 @@ final class BifrostClient: @unchecked Sendable {
     private func updateCommonBudgets(
         virtualKey: VirtualKey,
         budgets: [Budget],
-        resetUsage: Bool?,
+        resetUsage: Bool,
         calendarAligned: Bool? = nil,
         completion: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
@@ -788,7 +788,7 @@ final class BifrostClient: @unchecked Sendable {
         )
     }
 
-    private func updateCommonBudgetPayload(budgets: [BudgetUpdate], resetUsage: Bool?, calendarAligned: Bool?, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
+    private func updateCommonBudgetPayload(budgets: [BudgetUpdate], resetUsage: Bool, calendarAligned: Bool?, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         let payload = BudgetUpdatePayload(
             budgets: budgets,
             resetBudgetUsage: resetUsage,
@@ -826,7 +826,7 @@ final class BifrostClient: @unchecked Sendable {
         virtualKey: VirtualKey,
         provider: String,
         transform: ([BudgetUpdate]) -> [BudgetUpdate],
-        resetUsage: Bool?,
+        resetUsage: Bool,
         calendarAligned: Bool? = nil,
         completion: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
@@ -852,7 +852,7 @@ final class BifrostClient: @unchecked Sendable {
         )
     }
 
-    private func updateProviderBudgetPayload(providerConfigs: [ProviderConfigUpdate], resetUsage: Bool?, calendarAligned: Bool?, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
+    private func updateProviderBudgetPayload(providerConfigs: [ProviderConfigUpdate], resetUsage: Bool, calendarAligned: Bool?, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         let payload = ProviderBudgetUpdatePayload(
             providerConfigs: providerConfigs,
             resetBudgetUsage: resetUsage,
@@ -887,6 +887,9 @@ final class BifrostClient: @unchecked Sendable {
     }
 
     private func budgetMatches(_ left: Budget, _ right: Budget) -> Bool {
+        if let leftID = left.id, let rightID = right.id {
+            return leftID == rightID
+        }
         return left.resetDuration == right.resetDuration
     }
 
@@ -921,12 +924,10 @@ final class BifrostClient: @unchecked Sendable {
     }
 
     private func merging(budgets: [Budget], into virtualKey: VirtualKey) -> VirtualKey {
-        let commonBudgets = virtualKey.budgets.isEmpty
-            ? mergedBudgets(
-                existing: virtualKey.budgets,
-                additional: budgets.filter { $0.virtualKeyID == virtualKey.id }
-            )
-            : virtualKey.budgets
+        let commonBudgets = refreshedBudgets(
+            existing: virtualKey.budgets,
+            fetched: budgets.filter { $0.virtualKeyID == virtualKey.id }
+        )
         let providerConfigs = virtualKey.providerConfigs.map { providerConfig in
             let providerBudgets = budgets.filter { $0.providerConfigID == providerConfig.id }
             return ProviderConfig(
@@ -937,9 +938,7 @@ final class BifrostClient: @unchecked Sendable {
                 blacklistedModels: providerConfig.blacklistedModels,
                 allowAllKeys: providerConfig.allowAllKeys,
                 keys: providerConfig.keys,
-                budgets: providerConfig.budgets.isEmpty
-                    ? mergedBudgets(existing: providerConfig.budgets, additional: providerBudgets)
-                    : providerConfig.budgets
+                budgets: refreshedBudgets(existing: providerConfig.budgets, fetched: providerBudgets)
             )
         }
         return VirtualKey(
@@ -949,6 +948,24 @@ final class BifrostClient: @unchecked Sendable {
             providerConfigs: providerConfigs,
             calendarAligned: virtualKey.calendarAligned
         )
+    }
+
+    private func refreshedBudgets(existing: [Budget], fetched: [Budget]) -> [Budget] {
+        let refreshed = existing.map { budget in
+            guard let latest = fetched.first(where: { budgetMatches($0, budget) }) else {
+                return budget
+            }
+            return Budget(
+                id: latest.id ?? budget.id,
+                maxLimit: budget.maxLimit,
+                currentUsage: latest.currentUsage,
+                resetDuration: budget.resetDuration,
+                lastReset: latest.lastReset ?? budget.lastReset,
+                virtualKeyID: latest.virtualKeyID ?? budget.virtualKeyID,
+                providerConfigID: latest.providerConfigID ?? budget.providerConfigID
+            )
+        }
+        return mergedBudgets(existing: refreshed, additional: fetched)
     }
 
     private func mergedBudgets(existing: [Budget], additional: [Budget]) -> [Budget] {

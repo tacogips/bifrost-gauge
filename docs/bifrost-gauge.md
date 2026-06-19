@@ -90,6 +90,13 @@ The menu only edits Virtual Key level budgets. It intentionally does not expose
 provider-specific budget controls; use separate Virtual Keys when you want
 separate Codex, Claude, or other client budgets.
 
+Refresh loads the selected Virtual Key and then fetches
+`/api/governance/budgets`. When both responses contain the same budget, the app
+keeps the Virtual Key budget definition and overlays the latest
+`current_usage`, so the menu bar usage indicator is always calculated from the
+current budget limit and current spend. If the usage fetch fails, refresh shows
+an error instead of rendering potentially stale usage.
+
 When a Bifrost budget is active, Bifrost returns an error after usage exceeds
 `max_limit`. The menu item `Allow Over-Budget Requests` controls whether those
 over-budget requests keep going for the current Virtual Key. On mode keeps the
@@ -114,13 +121,16 @@ Reset sends the current Virtual Key budget set:
 }
 ```
 
-Updates use `PUT /api/governance/virtual-keys/{vk_id}`. The app sends the
-complete current Virtual Key budget set so that update calls do not delete other
-budget windows. Budget update objects intentionally omit `id`; Bifrost
-reconciles the desired budget window from `max_limit` and `reset_duration`.
+Updates use `PUT /api/governance/virtual-keys/{vk_id}`. Except for Reset, the
+app sends `reset_budget_usage=false` so current usage is preserved. The app
+sends the complete current Virtual Key budget set so that update calls do not
+delete other budget windows. Budget update objects intentionally omit `id`;
+Bifrost reconciles the desired budget window from `max_limit` and
+`reset_duration`.
 
-Raise sends the same scope with the selected budget's `max_limit` increased by
-the chosen dollar amount. Reset duration changes send the same scope with only
-the selected budget's `reset_duration` changed; other budgets and `max_limit`
-values are preserved. The calendar-aligned toggle sends `calendar_aligned` in
-the same `PUT /api/governance/virtual-keys/{vk_id}` payload.
+Raise and Set Budget Limit send the same scope with the selected budget's
+`max_limit` changed and `reset_budget_usage=false`, so existing usage is
+preserved and progress is recalculated against the new limit. Reset duration
+changes send the same scope with only the selected budget's `reset_duration`
+changed; other budgets and `max_limit` values are preserved. The
+calendar-aligned toggle and vendor budget updates also preserve current usage.
