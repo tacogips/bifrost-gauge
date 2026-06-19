@@ -23,14 +23,49 @@ enum BudgetResetWindow: String, CaseIterable {
 
 enum MenuBarDisplayMode: String, CaseIterable {
     case percent
+    case spendAmount
     case pie
+    case percentAndSpendAmount
     case pieAndPercent
+    case pieAndSpendAmount
+    case pieAndPercentAndSpendAmount
 
     var title: String {
         switch self {
         case .percent: return "Percent"
+        case .spendAmount: return "Spend Amount"
         case .pie: return "Pie"
+        case .percentAndSpendAmount: return "Percent + Spend Amount"
         case .pieAndPercent: return "Pie + Percent"
+        case .pieAndSpendAmount: return "Pie + Spend Amount"
+        case .pieAndPercentAndSpendAmount: return "Pie + Percent + Spend Amount"
+        }
+    }
+
+    var showsPie: Bool {
+        switch self {
+        case .pie, .pieAndPercent, .pieAndSpendAmount, .pieAndPercentAndSpendAmount:
+            return true
+        case .percent, .spendAmount, .percentAndSpendAmount:
+            return false
+        }
+    }
+
+    var showsPercent: Bool {
+        switch self {
+        case .percent, .percentAndSpendAmount, .pieAndPercent, .pieAndPercentAndSpendAmount:
+            return true
+        case .spendAmount, .pie, .pieAndSpendAmount:
+            return false
+        }
+    }
+
+    var showsSpendAmount: Bool {
+        switch self {
+        case .spendAmount, .percentAndSpendAmount, .pieAndSpendAmount, .pieAndPercentAndSpendAmount:
+            return true
+        case .percent, .pie, .pieAndPercent:
+            return false
         }
     }
 }
@@ -1508,7 +1543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ratio = budget.maxLimit > 0 ? budget.currentUsage / budget.maxLimit : 0
         let percentage = min(999, ratio * 100)
         let remaining = max(0, budget.maxLimit - budget.currentUsage)
-        updateStatusDisplay(percentage: percentage, ratio: ratio)
+        updateStatusDisplay(percentage: percentage, ratio: ratio, spendAmount: budget.currentUsage)
         summaryItem.title = "\(virtualKey.name ?? virtualKey.id) / \(target.title)"
         if settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key) != nil {
             usageItem.title = String(
@@ -1526,26 +1561,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStaticMenuState()
     }
 
-    private func updateStatusDisplay(percentage: Double, ratio: Double) {
+    private func updateStatusDisplay(percentage: Double, ratio: Double, spendAmount: Double) {
         guard let button = statusItem.button else {
             return
         }
-        let percentTitle = String(format: " %.1f%%", percentage)
-        switch settings.menuBarDisplayMode {
-        case .percent:
-            statusItem.length = NSStatusItem.variableLength
+        let mode = settings.menuBarDisplayMode
+        var titleParts: [String] = []
+        if mode.showsPercent {
+            titleParts.append(String(format: "%.1f%%", percentage))
+        }
+        if mode.showsSpendAmount {
+            titleParts.append(String(format: "$%.2f", spendAmount))
+        }
+
+        if mode.showsPie {
+            button.image = makePieImage(ratio: ratio)
+            button.imagePosition = titleParts.isEmpty ? .imageOnly : .imageLeft
+        } else {
             button.image = nil
-            button.title = percentTitle
-        case .pie:
+            button.imagePosition = .noImage
+        }
+
+        if titleParts.isEmpty {
             statusItem.length = NSStatusItem.squareLength
             button.title = ""
-            button.image = makePieImage(ratio: ratio)
-            button.imagePosition = .imageOnly
-        case .pieAndPercent:
+        } else {
             statusItem.length = NSStatusItem.variableLength
-            button.title = percentTitle
-            button.image = makePieImage(ratio: ratio)
-            button.imagePosition = .imageLeft
+            button.title = " " + titleParts.joined(separator: " ")
         }
     }
 

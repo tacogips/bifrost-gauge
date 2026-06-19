@@ -123,6 +123,11 @@ Example:
 }
 ```
 
+`menuBarDisplayMode` accepts all non-empty pie chart, percentage, and spend
+amount combinations: `pie`, `percent`, `spendAmount`, `pieAndPercent`,
+`pieAndSpendAmount`, `percentAndSpendAmount`, and
+`pieAndPercentAndSpendAmount`.
+
 Optional keys:
 
 ```json

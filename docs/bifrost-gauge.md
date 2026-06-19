@@ -50,6 +50,11 @@ Example:
 }
 ```
 
+`menuBarDisplayMode` supports every non-empty combination of pie chart,
+percentage, and spend amount: `pie`, `percent`, `spendAmount`,
+`pieAndPercent`, `pieAndSpendAmount`, `percentAndSpendAmount`, and
+`pieAndPercentAndSpendAmount`.
+
 See [macOS launchd and bifrost-gauge Setup](macos-launchd-and-gauge.md)
 for LaunchAgent setup, port changes, and URL configuration.
 
@@ -68,7 +73,7 @@ Click the menu bar item to:
 - set the selected Bifrost budget `reset_duration` from Budget Settings
 - toggle Bifrost `calendar_aligned` resets from Budget Settings
 - switch between registered Bifrost Virtual Keys
-- switch menu bar display between percent, pie, or pie plus percent
+- switch menu bar display between any combination of percent, pie, and spend amount
 - set the automatic refresh period from Bifrost Settings
 - edit the Bifrost base URL from Bifrost Settings
 - toggle "Launch at Login"; the app writes or removes its own LaunchAgent
