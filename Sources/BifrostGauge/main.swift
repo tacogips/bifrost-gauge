@@ -695,6 +695,36 @@ enum BudgetPayloadBuilder {
     }
 }
 
+enum BudgetSnapshotMerger {
+    static func refreshedBudgets(existing: [Budget], fetched: [Budget]) -> [Budget] {
+        let refreshed = existing.map { budget in
+            guard let latest = fetched.first(where: { BudgetPayloadBuilder.budgetMatches($0, budget) }) else {
+                return budget
+            }
+            return Budget(
+                id: latest.id ?? budget.id,
+                maxLimit: latest.maxLimit,
+                currentUsage: latest.currentUsage,
+                resetDuration: latest.resetDuration,
+                lastReset: latest.lastReset ?? budget.lastReset,
+                virtualKeyID: latest.virtualKeyID ?? budget.virtualKeyID,
+                providerConfigID: latest.providerConfigID ?? budget.providerConfigID,
+                modelConfigID: latest.modelConfigID ?? budget.modelConfigID
+            )
+        }
+        return mergedBudgets(existing: refreshed, additional: fetched)
+    }
+
+    private static func mergedBudgets(existing: [Budget], additional: [Budget]) -> [Budget] {
+        additional.reduce(existing) { partial, budget in
+            if partial.contains(where: { BudgetPayloadBuilder.budgetMatches($0, budget) }) {
+                return partial
+            }
+            return partial + [budget]
+        }
+    }
+}
+
 enum BifrostGaugeError: LocalizedError {
     case missingBudget
     case missingVirtualKey
@@ -987,13 +1017,6 @@ final class BifrostClient: @unchecked Sendable {
         }
     }
 
-    private func budgetMatches(_ left: Budget, _ right: Budget) -> Bool {
-        if let leftID = left.id, let rightID = right.id {
-            return leftID == rightID
-        }
-        return left.resetDuration == right.resetDuration
-    }
-
     private func budgetUpdateMatches(_ left: BudgetUpdate, _ right: Budget) -> Bool {
         return left.resetDuration == right.resetDuration
     }
@@ -1025,7 +1048,7 @@ final class BifrostClient: @unchecked Sendable {
     }
 
     private func merging(budgets: [Budget], into virtualKey: VirtualKey) -> VirtualKey {
-        let commonBudgets = refreshedBudgets(
+        let commonBudgets = BudgetSnapshotMerger.refreshedBudgets(
             existing: virtualKey.budgets,
             fetched: budgets.filter { $0.virtualKeyID == virtualKey.id }
         )
@@ -1039,7 +1062,7 @@ final class BifrostClient: @unchecked Sendable {
                 blacklistedModels: providerConfig.blacklistedModels,
                 allowAllKeys: providerConfig.allowAllKeys,
                 keys: providerConfig.keys,
-                budgets: refreshedBudgets(existing: providerConfig.budgets, fetched: providerBudgets)
+                budgets: BudgetSnapshotMerger.refreshedBudgets(existing: providerConfig.budgets, fetched: providerBudgets)
             )
         }
         return VirtualKey(
@@ -1049,34 +1072,6 @@ final class BifrostClient: @unchecked Sendable {
             providerConfigs: providerConfigs,
             calendarAligned: virtualKey.calendarAligned
         )
-    }
-
-    private func refreshedBudgets(existing: [Budget], fetched: [Budget]) -> [Budget] {
-        let refreshed = existing.map { budget in
-            guard let latest = fetched.first(where: { budgetMatches($0, budget) }) else {
-                return budget
-            }
-            return Budget(
-                id: latest.id ?? budget.id,
-                maxLimit: budget.maxLimit,
-                currentUsage: latest.currentUsage,
-                resetDuration: budget.resetDuration,
-                lastReset: latest.lastReset ?? budget.lastReset,
-                virtualKeyID: latest.virtualKeyID ?? budget.virtualKeyID,
-                providerConfigID: latest.providerConfigID ?? budget.providerConfigID,
-                modelConfigID: latest.modelConfigID ?? budget.modelConfigID
-            )
-        }
-        return mergedBudgets(existing: refreshed, additional: fetched)
-    }
-
-    private func mergedBudgets(existing: [Budget], additional: [Budget]) -> [Budget] {
-        additional.reduce(existing) { partial, budget in
-            if partial.contains(where: { budgetMatches($0, budget) }) {
-                return partial
-            }
-            return partial + [budget]
-        }
     }
 
     func defaultResetDuration(from virtualKey: VirtualKey) -> String? {

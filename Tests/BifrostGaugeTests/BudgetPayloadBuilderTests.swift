@@ -106,6 +106,33 @@ final class BudgetPayloadBuilderTests: XCTestCase {
         XCTAssertEqual(updates[1].keyIDs, ["anthropic-key"])
     }
 
+    func testRefreshedBudgetsUseFetchedLimitUsageAndResetDuration() {
+        let existing = [makeBudget(id: "common-1d", maxLimit: 10, resetDuration: "1d", virtualKeyID: "vk-personal")]
+        let fetched = [makeBudget(id: "common-1d", maxLimit: 15, currentUsage: 6, resetDuration: "1M", virtualKeyID: "vk-personal")]
+
+        let refreshed = BudgetSnapshotMerger.refreshedBudgets(existing: existing, fetched: fetched)
+
+        XCTAssertEqual(refreshed.count, 1)
+        XCTAssertEqual(refreshed[0].id, "common-1d")
+        XCTAssertEqual(refreshed[0].maxLimit, 15)
+        XCTAssertEqual(refreshed[0].currentUsage, 6)
+        XCTAssertEqual(refreshed[0].resetDuration, "1M")
+    }
+
+    func testRefreshedBudgetsAppendFetchedOnlyBudgets() {
+        let existing = [makeBudget(id: "common-1d", maxLimit: 10, resetDuration: "1d", virtualKeyID: "vk-personal")]
+        let fetched = [
+            makeBudget(id: "common-1d", maxLimit: 15, currentUsage: 6, resetDuration: "1d", virtualKeyID: "vk-personal"),
+            makeBudget(id: "common-1w", maxLimit: 20, currentUsage: 8, resetDuration: "1w", virtualKeyID: "vk-personal")
+        ]
+
+        let refreshed = BudgetSnapshotMerger.refreshedBudgets(existing: existing, fetched: fetched)
+
+        XCTAssertEqual(refreshed.map(\.id), ["common-1d", "common-1w"])
+        XCTAssertEqual(refreshed.map(\.maxLimit), [15, 20])
+        XCTAssertEqual(refreshed.map(\.currentUsage), [6, 8])
+    }
+
     private func makeVirtualKey() -> VirtualKey {
         VirtualKey(
             id: "vk-personal",
@@ -145,6 +172,7 @@ final class BudgetPayloadBuilderTests: XCTestCase {
     private func makeBudget(
         id: String,
         maxLimit: Double,
+        currentUsage: Double = 0,
         resetDuration: String,
         virtualKeyID: String? = nil,
         providerConfigID: Int? = nil,
@@ -153,7 +181,7 @@ final class BudgetPayloadBuilderTests: XCTestCase {
         Budget(
             id: id,
             maxLimit: maxLimit,
-            currentUsage: 0,
+            currentUsage: currentUsage,
             resetDuration: resetDuration,
             lastReset: nil,
             virtualKeyID: virtualKeyID,
