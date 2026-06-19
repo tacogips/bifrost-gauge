@@ -31,8 +31,7 @@ Persistent settings are stored in:
 ```
 
 Menu changes such as Bifrost URL, Virtual Key selection, budget window
-selection, menu bar display mode, refresh period, default raise
-amount, and saved budget limit restore values are written back to that
+selection, menu bar display mode, and refresh period are written back to that
 JSON file. Budget reset timing is Bifrost state, not local app cron state.
 
 Example:
@@ -40,10 +39,6 @@ Example:
 ```json
 {
   "baseURL": "http://127.0.0.1:18080",
-  "defaultRaiseAmount": 5,
-  "disabledBudgetLimits": {
-    "virtual-key:vk-personal:common:1M": 10
-  },
   "menuBarDisplayMode": "pieAndPercent",
   "refreshSeconds": 10,
   "virtualKeyID": "vk-personal"
@@ -63,13 +58,9 @@ for LaunchAgent setup, port changes, and URL configuration.
 Click the menu bar item to:
 
 - refresh current Bifrost budget progress
-- reset budget usage now from Budget Actions
-- raise the selected budget by the saved default amount from Budget Actions
-- raise the selected budget by a custom dollar amount from Budget Actions
+- reset budget usage
 - set the selected budget limit from Budget Settings
 - select one budget window within the current Virtual Key from Budget Settings
-- restore a saved budget limit from Budget Settings when an older app version changed it
-- set the default raise amount from Budget Settings
 - set the selected Bifrost budget `reset_duration` from Budget Settings
 - toggle Bifrost `calendar_aligned` resets from Budget Settings
 - switch between registered Bifrost Virtual Keys
@@ -86,26 +77,26 @@ cron reset schedules at fetch time. When `calendar_aligned` is enabled, Bifrost
 supports day, week, month, and year reset windows; turn it off before using
 minute or hour reset durations.
 
-The menu only edits Virtual Key level budgets. It intentionally does not expose
-provider-specific budget controls; use separate Virtual Keys when you want
-separate Codex, Claude, or other client budgets.
+The editable budget surface is the selected Virtual Key detail response from
+`GET /api/governance/virtual-keys/{vk_id}`. Bifrost may also expose
+Virtual-Key-related budgets through `GET /api/governance/budgets`; that index is
+read-only in the current governance API and is not mixed into the editable menu
+state. This keeps the menu aligned with the same budget set that
+`PUT /api/governance/virtual-keys/{vk_id}` updates.
 
 Refresh loads the selected Virtual Key and then fetches
-`/api/governance/budgets`. When both responses contain the same budget, the app
-keeps the Virtual Key budget definition and overlays the latest
-`current_usage`, so the menu bar usage indicator is calculated from the current
-budget limit and current spend. If the usage fetch fails, refresh shows an error
-instead of rendering potentially stale usage.
+`/api/governance/budgets` only to refresh provider budget snapshots. The menu
+bar Virtual Key budget indicator is calculated from the editable budget set
+returned by the selected Virtual Key detail endpoint.
 
 When a Bifrost budget is active, Bifrost returns an error after usage exceeds
 `max_limit`. `bifrost-gauge` does not change `max_limit` to bypass this
-enforcement. Older app versions could store an original limit in
-`disabledBudgetLimits` after raising `max_limit`; the Budget Settings menu keeps
-a restore action for those legacy entries.
+enforcement. Configure Bifrost itself if you need a non-blocking over-budget
+policy.
 
-## Reset and Raise
+## Reset and Edit
 
-Reset sends the current Virtual Key budget set:
+Reset Usage sends the current Virtual Key budget set:
 
 ```json
 {
@@ -126,9 +117,9 @@ delete other budget windows. Budget update objects intentionally omit `id`;
 Bifrost reconciles the desired budget window from `max_limit` and
 `reset_duration`.
 
-Raise and Set Budget Limit send the same scope with the selected budget's
-`max_limit` changed and `reset_budget_usage=false`, so existing usage is
-preserved and progress is recalculated against the new limit. Reset duration
-changes send the same scope with only the selected budget's `reset_duration`
-changed; other budgets and `max_limit` values are preserved. The
-calendar-aligned toggle and vendor budget updates also preserve current usage.
+Set Budget Limit sends the selected budget's `max_limit` changed and
+`reset_budget_usage=false`, so existing usage is preserved and progress is
+recalculated against the new limit. Reset duration changes send the same scope
+with only the selected budget's `reset_duration` changed; other budgets and
+`max_limit` values are preserved. The calendar-aligned toggle and vendor budget
+updates also preserve current usage.

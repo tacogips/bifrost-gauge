@@ -2,20 +2,35 @@ import XCTest
 @testable import BifrostGauge
 
 final class BudgetPayloadBuilderTests: XCTestCase {
-    func testCommonTargetsExcludeModelScopedBudgetsWithDuplicateResetDuration() {
+    func testPositiveDoubleValidatorAcceptsTrimmedPositiveFiniteNumbers() {
+        XCTAssertEqual(NumericInputValidator.positiveDouble(" 12.5 "), 12.5)
+        XCTAssertEqual(NumericInputValidator.positiveDouble("1e2"), 100)
+    }
+
+    func testPositiveDoubleValidatorRejectsInvalidNonFiniteAndNonPositiveValues() {
+        XCTAssertNil(NumericInputValidator.positiveDouble(""))
+        XCTAssertNil(NumericInputValidator.positiveDouble("abc"))
+        XCTAssertNil(NumericInputValidator.positiveDouble("0"))
+        XCTAssertNil(NumericInputValidator.positiveDouble("-1"))
+        XCTAssertNil(NumericInputValidator.positiveDouble("nan"))
+        XCTAssertNil(NumericInputValidator.positiveDouble("inf"))
+        XCTAssertNil(NumericInputValidator.positiveDouble("-inf"))
+    }
+
+    func testVirtualKeyTargetsUseDetailBudgetsIncludingModelScopedBudgets() {
         let virtualKey = makeVirtualKey()
 
-        let targets = BudgetPayloadBuilder.commonTargets(from: virtualKey)
+        let targets = BudgetPayloadBuilder.virtualKeyTargets(from: virtualKey)
 
-        XCTAssertEqual(targets.map(\.budget.id), ["common-1d", "common-1w"])
+        XCTAssertEqual(targets.map(\.budget.id), ["model-1d", "model-1w"])
         XCTAssertEqual(targets.map(\.budget.resetDuration), ["1d", "1w"])
     }
 
-    func testRaiseBudgetPayloadUpdatesOnlySelectedCommonBudgetWithoutDuplicateResetDurations() {
+    func testSetBudgetLimitPayloadUpdatesOnlySelectedBudgetWithoutDuplicateResetDurations() {
         let virtualKey = makeVirtualKey()
-        let target = BudgetPayloadBuilder.commonTargets(from: virtualKey)[0]
+        let target = BudgetPayloadBuilder.virtualKeyTargets(from: virtualKey)[0]
 
-        let updates = BudgetPayloadBuilder.commonLimitUpdates(virtualKey: virtualKey, target: target, maxLimit: 15)
+        let updates = BudgetPayloadBuilder.virtualKeyLimitUpdates(virtualKey: virtualKey, target: target, maxLimit: 15)
 
         XCTAssertEqual(updates, [
             BudgetUpdate(maxLimit: 15, resetDuration: "1d"),
@@ -23,11 +38,11 @@ final class BudgetPayloadBuilderTests: XCTestCase {
         ])
     }
 
-    func testSetBudgetLimitPayloadPreservesOtherCommonBudgets() {
+    func testSetBudgetLimitPayloadPreservesOtherVirtualKeyBudgets() {
         let virtualKey = makeVirtualKey()
-        let target = BudgetPayloadBuilder.commonTargets(from: virtualKey)[1]
+        let target = BudgetPayloadBuilder.virtualKeyTargets(from: virtualKey)[1]
 
-        let updates = BudgetPayloadBuilder.commonLimitUpdates(virtualKey: virtualKey, target: target, maxLimit: 25)
+        let updates = BudgetPayloadBuilder.virtualKeyLimitUpdates(virtualKey: virtualKey, target: target, maxLimit: 25)
 
         XCTAssertEqual(updates, [
             BudgetUpdate(maxLimit: 10, resetDuration: "1d"),
@@ -35,20 +50,20 @@ final class BudgetPayloadBuilderTests: XCTestCase {
         ])
     }
 
-    func testResetBudgetUsagePayloadDeduplicatesCommonBudgets() {
-        let duplicateCommon = makeBudget(id: "common-1d-duplicate", maxLimit: 99, resetDuration: "1d")
-        let budgets = BudgetPayloadBuilder.uniqueBudgetsByResetDuration(makeVirtualKey().budgets + [duplicateCommon])
+    func testResetBudgetUsagePayloadDeduplicatesVirtualKeyBudgets() {
+        let duplicateBudget = makeBudget(id: "vk-1d-duplicate", maxLimit: 99, resetDuration: "1d")
+        let budgets = BudgetPayloadBuilder.uniqueBudgetsByResetDuration(makeVirtualKey().budgets + [duplicateBudget])
 
-        let updates = BudgetPayloadBuilder.commonUpdates(from: budgets)
+        let updates = BudgetPayloadBuilder.budgetUpdates(from: budgets)
 
         XCTAssertEqual(updates.filter { $0.resetDuration == "1d" }.count, 1)
     }
 
-    func testSetBudgetResetDurationUpdatesOnlySelectedCommonBudget() {
+    func testSetBudgetResetDurationUpdatesOnlySelectedVirtualKeyBudget() {
         let virtualKey = makeVirtualKey()
-        let target = BudgetPayloadBuilder.commonTargets(from: virtualKey)[0]
+        let target = BudgetPayloadBuilder.virtualKeyTargets(from: virtualKey)[0]
 
-        let updates = BudgetPayloadBuilder.commonResetDurationUpdates(
+        let updates = BudgetPayloadBuilder.virtualKeyResetDurationUpdates(
             virtualKey: virtualKey,
             target: target,
             resetDuration: "1M"
@@ -62,14 +77,14 @@ final class BudgetPayloadBuilderTests: XCTestCase {
 
     func testSetBudgetResetDurationDetectsDuplicateTargetWindow() {
         let virtualKey = makeVirtualKey()
-        let target = BudgetPayloadBuilder.commonTargets(from: virtualKey)[0]
+        let target = BudgetPayloadBuilder.virtualKeyTargets(from: virtualKey)[0]
 
         XCTAssertTrue(BudgetPayloadBuilder.resetDurationConflicts(virtualKey: virtualKey, target: target, resetDuration: "1w"))
         XCTAssertFalse(BudgetPayloadBuilder.resetDurationConflicts(virtualKey: virtualKey, target: target, resetDuration: "1M"))
     }
 
-    func testCalendarAlignedCommonPayloadPreservesBudgetLimitsAndResetUsageFlag() {
-        let updates = BudgetPayloadBuilder.commonUpdates(from: BudgetPayloadBuilder.commonTargets(from: makeVirtualKey()).map(\.budget))
+    func testCalendarAlignedVirtualKeyPayloadPreservesBudgetLimitsAndResetUsageFlag() {
+        let updates = BudgetPayloadBuilder.budgetUpdates(from: BudgetPayloadBuilder.virtualKeyTargets(from: makeVirtualKey()).map(\.budget))
         let payload = BudgetUpdatePayload(budgets: updates, resetBudgetUsage: false, calendarAligned: true)
 
         XCTAssertEqual(payload.budgets, [
@@ -107,30 +122,69 @@ final class BudgetPayloadBuilderTests: XCTestCase {
     }
 
     func testRefreshedBudgetsUseFetchedLimitUsageAndResetDuration() {
-        let existing = [makeBudget(id: "common-1d", maxLimit: 10, resetDuration: "1d", virtualKeyID: "vk-personal")]
-        let fetched = [makeBudget(id: "common-1d", maxLimit: 15, currentUsage: 6, resetDuration: "1M", virtualKeyID: "vk-personal")]
+        let existing = [makeBudget(id: "vk-1d", maxLimit: 10, resetDuration: "1d", virtualKeyID: "vk-personal")]
+        let fetched = [makeBudget(id: "vk-1d", maxLimit: 15, currentUsage: 6, resetDuration: "1M", virtualKeyID: "vk-personal")]
 
         let refreshed = BudgetSnapshotMerger.refreshedBudgets(existing: existing, fetched: fetched)
 
         XCTAssertEqual(refreshed.count, 1)
-        XCTAssertEqual(refreshed[0].id, "common-1d")
+        XCTAssertEqual(refreshed[0].id, "vk-1d")
         XCTAssertEqual(refreshed[0].maxLimit, 15)
         XCTAssertEqual(refreshed[0].currentUsage, 6)
         XCTAssertEqual(refreshed[0].resetDuration, "1M")
     }
 
     func testRefreshedBudgetsAppendFetchedOnlyBudgets() {
-        let existing = [makeBudget(id: "common-1d", maxLimit: 10, resetDuration: "1d", virtualKeyID: "vk-personal")]
+        let existing = [makeBudget(id: "vk-1d", maxLimit: 10, resetDuration: "1d", virtualKeyID: "vk-personal")]
         let fetched = [
-            makeBudget(id: "common-1d", maxLimit: 15, currentUsage: 6, resetDuration: "1d", virtualKeyID: "vk-personal"),
-            makeBudget(id: "common-1w", maxLimit: 20, currentUsage: 8, resetDuration: "1w", virtualKeyID: "vk-personal")
+            makeBudget(id: "vk-1d", maxLimit: 15, currentUsage: 6, resetDuration: "1d", virtualKeyID: "vk-personal"),
+            makeBudget(id: "vk-1w", maxLimit: 20, currentUsage: 8, resetDuration: "1w", virtualKeyID: "vk-personal")
         ]
 
         let refreshed = BudgetSnapshotMerger.refreshedBudgets(existing: existing, fetched: fetched)
 
-        XCTAssertEqual(refreshed.map(\.id), ["common-1d", "common-1w"])
+        XCTAssertEqual(refreshed.map(\.id), ["vk-1d", "vk-1w"])
         XCTAssertEqual(refreshed.map(\.maxLimit), [15, 20])
         XCTAssertEqual(refreshed.map(\.currentUsage), [6, 8])
+    }
+
+    func testBudgetsResponseDecodesModelScopedBudgetsWithoutCurrentUsage() throws {
+        let data = Data("""
+        {
+          "budgets": [
+            {
+              "id": "model-1d",
+              "max_limit": 10,
+              "reset_duration": "1d",
+              "model_config_id": "model-config"
+            }
+          ]
+        }
+        """.utf8)
+
+        let response = try JSONDecoder().decode(BudgetsResponse.self, from: data)
+
+        XCTAssertEqual(response.budgets.map(\.id), ["model-1d"])
+        XCTAssertEqual(response.budgets[0].modelConfigID, "model-config")
+        XCTAssertEqual(response.budgets[0].currentUsage, 0)
+    }
+
+    func testRefreshedBudgetsDoNotMatchVirtualKeyBudgetToModelBudgetWithSameResetDuration() {
+        let existing = [
+            makeBudget(id: nil, maxLimit: 15, resetDuration: "1d", virtualKeyID: "vk-personal", modelConfigID: "model-config")
+        ]
+        let fetched = [
+            makeBudget(id: nil, maxLimit: 10, currentUsage: 4, resetDuration: "1d", virtualKeyID: "vk-personal")
+        ]
+
+        let refreshed = BudgetSnapshotMerger.refreshedBudgets(existing: existing, fetched: fetched)
+
+        XCTAssertEqual(refreshed.count, 2)
+        XCTAssertEqual(refreshed[0].modelConfigID, "model-config")
+        XCTAssertEqual(refreshed[0].maxLimit, 15)
+        XCTAssertNil(refreshed[1].modelConfigID)
+        XCTAssertEqual(refreshed[1].maxLimit, 10)
+        XCTAssertEqual(refreshed[1].currentUsage, 4)
     }
 
     private func makeVirtualKey() -> VirtualKey {
@@ -138,10 +192,8 @@ final class BudgetPayloadBuilderTests: XCTestCase {
             id: "vk-personal",
             name: "Personal",
             budgets: [
-                makeBudget(id: "model-1d", maxLimit: 5, resetDuration: "1d", modelConfigID: "model-config"),
-                makeBudget(id: "common-1d", maxLimit: 10, resetDuration: "1d", virtualKeyID: "vk-personal"),
-                makeBudget(id: "provider-leaked-1d", maxLimit: 3, resetDuration: "1d", providerConfigID: 2),
-                makeBudget(id: "common-1w", maxLimit: 20, resetDuration: "1w", virtualKeyID: "vk-personal")
+                makeBudget(id: "model-1d", maxLimit: 10, resetDuration: "1d", modelConfigID: "model-config"),
+                makeBudget(id: "model-1w", maxLimit: 20, resetDuration: "1w", modelConfigID: "model-config")
             ],
             providerConfigs: [
                 ProviderConfig(
@@ -170,7 +222,7 @@ final class BudgetPayloadBuilderTests: XCTestCase {
     }
 
     private func makeBudget(
-        id: String,
+        id: String?,
         maxLimit: Double,
         currentUsage: Double = 0,
         resetDuration: String,

@@ -112,8 +112,17 @@ Use the menu bar item to change:
 - displayed budget window
 - Bifrost budget reset duration and calendar alignment
 - budget usage refresh interval
-- default raise amount
-- restore a saved budget limit if an older app version changed it
+
+Config keys are intentionally small and map to current app state only:
+
+```json
+{
+  "baseURL": "http://127.0.0.1:18080",
+  "menuBarDisplayMode": "pieAndPercent",
+  "refreshSeconds": 10,
+  "virtualKeyID": "vk-personal"
+}
+```
 
 ## 4. Run Bifrost as a macOS Daemon
 
@@ -233,7 +242,8 @@ Also update `bifrost-gauge`:
 
 ```json
 {
-  "baseURL": "http://127.0.0.1:18080"
+  "baseURL": "http://127.0.0.1:18080",
+  "virtualKeyID": "vk-personal"
 }
 ```
 

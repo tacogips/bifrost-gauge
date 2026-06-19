@@ -142,13 +142,17 @@ struct AppConfig {
     }
 }
 
-final class AppSettings {
-    static let legacyHighWaterBudgetLimit = 1_000_000_000.0
-
-    static func disabledBudgetLimitKey(virtualKeyID: String, budgetKey: String) -> String {
-        "virtual-key:\(virtualKeyID):\(budgetKey)"
+enum NumericInputValidator {
+    static func positiveDouble(_ rawValue: String) -> Double? {
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let number = Double(value), number.isFinite, number > 0 else {
+            return nil
+        }
+        return number
     }
+}
 
+final class AppSettings {
     private let initial: AppConfig
     private let configURL: URL
     private var state: ConfigFileState
@@ -204,40 +208,12 @@ final class AppSettings {
         }
     }
 
-    var defaultRaiseAmount: Double {
-        get {
-            let value = state.defaultRaiseAmount ?? 0
-            return value > 0 ? value : 5.0
-        }
-        set {
-            state.defaultRaiseAmount = max(0.01, newValue)
-            persist()
-        }
-    }
-
     var menuBarDisplayMode: MenuBarDisplayMode {
         get { MenuBarDisplayMode(rawValue: state.menuBarDisplayMode ?? "") ?? .pieAndPercent }
         set {
             state.menuBarDisplayMode = newValue.rawValue
             persist()
         }
-    }
-
-    func disabledBudgetLimit(forVirtualKeyID virtualKeyID: String, budgetKey: String) -> Double? {
-        let key = Self.disabledBudgetLimitKey(virtualKeyID: virtualKeyID, budgetKey: budgetKey)
-        return state.disabledBudgetLimits?[key]
-    }
-
-    func setDisabledBudgetLimit(_ limit: Double?, forVirtualKeyID virtualKeyID: String, budgetKey: String) {
-        let key = Self.disabledBudgetLimitKey(virtualKeyID: virtualKeyID, budgetKey: budgetKey)
-        if state.disabledBudgetLimits == nil {
-            state.disabledBudgetLimits = [:]
-        }
-        state.disabledBudgetLimits?[key] = limit
-        if state.disabledBudgetLimits?.isEmpty == true {
-            state.disabledBudgetLimits = nil
-        }
-        persist()
     }
 
     func currentConfig() -> AppConfig {
@@ -300,7 +276,6 @@ final class AppSettings {
         state.resetDuration = state.resetDuration ?? initial.resetDuration
         state.refreshSeconds = state.refreshSeconds ?? initial.refreshSeconds
         state.adminToken = state.adminToken ?? initial.adminToken
-        state.defaultRaiseAmount = state.defaultRaiseAmount ?? 5.0
         state.menuBarDisplayMode = state.menuBarDisplayMode ?? MenuBarDisplayMode.pieAndPercent.rawValue
     }
 }
@@ -311,9 +286,7 @@ struct ConfigFileState: Codable {
     var resetDuration: String?
     var refreshSeconds: Double?
     var adminToken: String?
-    var defaultRaiseAmount: Double?
     var menuBarDisplayMode: String?
-    var disabledBudgetLimits: [String: Double]?
 
     var isEmpty: Bool {
         baseURL == nil &&
@@ -321,9 +294,7 @@ struct ConfigFileState: Codable {
             resetDuration == nil &&
             refreshSeconds == nil &&
             adminToken == nil &&
-            defaultRaiseAmount == nil &&
-            menuBarDisplayMode == nil &&
-            disabledBudgetLimits == nil
+            menuBarDisplayMode == nil
     }
 }
 
@@ -419,8 +390,26 @@ struct Budget: Decodable {
         case modelConfigID = "model_config_id"
     }
 
-    var isCommonScope: Bool {
-        providerConfigID == nil && modelConfigID == nil
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id)
+        self.maxLimit = try container.decode(Double.self, forKey: .maxLimit)
+        self.currentUsage = try container.decodeIfPresent(Double.self, forKey: .currentUsage) ?? 0
+        self.resetDuration = try container.decode(String.self, forKey: .resetDuration)
+        self.lastReset = try container.decodeIfPresent(String.self, forKey: .lastReset)
+        self.virtualKeyID = try container.decodeIfPresent(String.self, forKey: .virtualKeyID)
+        self.providerConfigID = try container.decodeIfPresent(Int.self, forKey: .providerConfigID)
+        self.modelConfigID = try container.decodeIfPresent(String.self, forKey: .modelConfigID)
+    }
+
+    var scopeKey: String {
+        if let providerConfigID {
+            return "provider:\(providerConfigID):model:\(modelConfigID ?? "")"
+        }
+        if let modelConfigID {
+            return "model:\(modelConfigID)"
+        }
+        return "virtual-key"
     }
 
     init(
@@ -507,7 +496,7 @@ struct DBKey: Decodable {
 }
 
 enum BudgetScope {
-    case common
+    case virtualKey
     case provider(String)
 }
 
@@ -517,8 +506,8 @@ struct BudgetTarget {
 
     var key: String {
         switch scope {
-        case .common:
-            return "common:\(budget.id ?? budget.resetDuration)"
+        case .virtualKey:
+            return budget.id ?? budget.resetDuration
         case .provider(let provider):
             return "provider:\(provider):\(budget.id ?? budget.resetDuration)"
         }
@@ -526,7 +515,7 @@ struct BudgetTarget {
 
     var title: String {
         switch scope {
-        case .common:
+        case .virtualKey:
             return String(format: "%@ / $%.2f limit", budget.resetDuration, budget.maxLimit)
         case .provider(let provider):
             return "\(provider) / \(budget.id ?? budget.resetDuration)"
@@ -596,12 +585,12 @@ struct ProviderBudgetUpdatePayload: Encodable, Equatable {
 }
 
 enum BudgetPayloadBuilder {
-    static func commonTargets(from virtualKey: VirtualKey) -> [BudgetTarget] {
-        commonBudgets(from: virtualKey).map { BudgetTarget(scope: .common, budget: $0) }
+    static func virtualKeyTargets(from virtualKey: VirtualKey) -> [BudgetTarget] {
+        virtualKeyBudgets(from: virtualKey).map { BudgetTarget(scope: .virtualKey, budget: $0) }
     }
 
-    static func commonLimitUpdates(virtualKey: VirtualKey, target: BudgetTarget, maxLimit: Double) -> [BudgetUpdate] {
-        commonBudgets(from: virtualKey).map { budget in
+    static func virtualKeyLimitUpdates(virtualKey: VirtualKey, target: BudgetTarget, maxLimit: Double) -> [BudgetUpdate] {
+        virtualKeyBudgets(from: virtualKey).map { budget in
             BudgetUpdate(
                 maxLimit: budgetMatches(budget, target.budget) ? maxLimit : budget.maxLimit,
                 resetDuration: budget.resetDuration
@@ -609,8 +598,8 @@ enum BudgetPayloadBuilder {
         }
     }
 
-    static func commonResetDurationUpdates(virtualKey: VirtualKey, target: BudgetTarget, resetDuration: String) -> [BudgetUpdate] {
-        commonBudgets(from: virtualKey).map { budget in
+    static func virtualKeyResetDurationUpdates(virtualKey: VirtualKey, target: BudgetTarget, resetDuration: String) -> [BudgetUpdate] {
+        virtualKeyBudgets(from: virtualKey).map { budget in
             BudgetUpdate(
                 maxLimit: budget.maxLimit,
                 resetDuration: budgetMatches(budget, target.budget) ? resetDuration : budget.resetDuration
@@ -619,12 +608,12 @@ enum BudgetPayloadBuilder {
     }
 
     static func resetDurationConflicts(virtualKey: VirtualKey, target: BudgetTarget, resetDuration: String) -> Bool {
-        commonBudgets(from: virtualKey).contains { budget in
+        virtualKeyBudgets(from: virtualKey).contains { budget in
             !budgetMatches(budget, target.budget) && budget.resetDuration == resetDuration
         }
     }
 
-    static func commonUpdates(from budgets: [Budget]) -> [BudgetUpdate] {
+    static func budgetUpdates(from budgets: [Budget]) -> [BudgetUpdate] {
         uniqueBudgetsByResetDuration(budgets).map {
             BudgetUpdate(maxLimit: $0.maxLimit, resetDuration: $0.resetDuration)
         }
@@ -666,6 +655,9 @@ enum BudgetPayloadBuilder {
     }
 
     static func budgetMatches(_ left: Budget, _ right: Budget) -> Bool {
+        guard left.scopeKey == right.scopeKey else {
+            return false
+        }
         if let leftID = left.id, let rightID = right.id {
             return leftID == rightID
         }
@@ -681,8 +673,8 @@ enum BudgetPayloadBuilder {
         }
     }
 
-    private static func commonBudgets(from virtualKey: VirtualKey) -> [Budget] {
-        uniqueBudgetsByResetDuration(virtualKey.budgets.filter(\.isCommonScope))
+    private static func virtualKeyBudgets(from virtualKey: VirtualKey) -> [Budget] {
+        uniqueBudgetsByResetDuration(virtualKey.budgets)
     }
 
     private static func uniqueBudgetUpdatesByResetDuration(_ budgets: [BudgetUpdate]) -> [BudgetUpdate] {
@@ -822,22 +814,18 @@ final class BifrostClient: @unchecked Sendable {
 
     func resetBudgetUsage(virtualKey: VirtualKey, target: BudgetTarget, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         switch target.scope {
-        case .common:
-            updateCommonBudgets(virtualKey: virtualKey, budgets: commonBudgets(from: virtualKey), resetUsage: true, completion: completion)
+        case .virtualKey:
+            updateVirtualKeyBudgets(virtualKey: virtualKey, budgets: virtualKeyBudgets(from: virtualKey), resetUsage: true, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { $0 }, resetUsage: true, completion: completion)
         }
     }
 
-    func raiseBudget(virtualKey: VirtualKey, target: BudgetTarget, amount: Double, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
-        setBudgetLimit(virtualKey: virtualKey, target: target, maxLimit: target.budget.maxLimit + amount, completion: completion)
-    }
-
     func setBudgetLimit(virtualKey: VirtualKey, target: BudgetTarget, maxLimit: Double, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         switch target.scope {
-        case .common:
-            let updates = BudgetPayloadBuilder.commonLimitUpdates(virtualKey: virtualKey, target: target, maxLimit: maxLimit)
-            updateCommonBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
+        case .virtualKey:
+            let updates = BudgetPayloadBuilder.virtualKeyLimitUpdates(virtualKey: virtualKey, target: target, maxLimit: maxLimit)
+            updateVirtualKeyBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { budgets in
                 budgets.map { budget in
@@ -850,9 +838,9 @@ final class BifrostClient: @unchecked Sendable {
 
     func setBudgetResetDuration(virtualKey: VirtualKey, target: BudgetTarget, resetDuration: String, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         switch target.scope {
-        case .common:
-            let updates = BudgetPayloadBuilder.commonResetDurationUpdates(virtualKey: virtualKey, target: target, resetDuration: resetDuration)
-            updateCommonBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
+        case .virtualKey:
+            let updates = BudgetPayloadBuilder.virtualKeyResetDurationUpdates(virtualKey: virtualKey, target: target, resetDuration: resetDuration)
+            updateVirtualKeyBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { budgets in
                 budgets.map { budget in
@@ -868,10 +856,10 @@ final class BifrostClient: @unchecked Sendable {
 
     func setCalendarAligned(virtualKey: VirtualKey, target: BudgetTarget, calendarAligned: Bool, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         switch target.scope {
-        case .common:
-            updateCommonBudgets(
+        case .virtualKey:
+            updateVirtualKeyBudgets(
                 virtualKey: virtualKey,
-                budgets: commonBudgets(from: virtualKey),
+                budgets: virtualKeyBudgets(from: virtualKey),
                 resetUsage: false,
                 calendarAligned: calendarAligned,
                 completion: completion
@@ -909,22 +897,22 @@ final class BifrostClient: @unchecked Sendable {
     }
 
     func budgetTargets(from virtualKey: VirtualKey) -> [BudgetTarget] {
-        BudgetPayloadBuilder.commonTargets(from: virtualKey)
+        BudgetPayloadBuilder.virtualKeyTargets(from: virtualKey)
     }
 
-    private func commonBudgets(from virtualKey: VirtualKey) -> [Budget] {
-        BudgetPayloadBuilder.commonTargets(from: virtualKey).map(\.budget)
+    private func virtualKeyBudgets(from virtualKey: VirtualKey) -> [Budget] {
+        BudgetPayloadBuilder.virtualKeyTargets(from: virtualKey).map(\.budget)
     }
 
-    private func updateCommonBudgets(
+    private func updateVirtualKeyBudgets(
         virtualKey: VirtualKey,
         budgets: [Budget],
         resetUsage: Bool,
         calendarAligned: Bool? = nil,
         completion: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
-        let updates = BudgetPayloadBuilder.commonUpdates(from: budgets)
-        updateCommonBudgetPayload(
+        let updates = BudgetPayloadBuilder.budgetUpdates(from: budgets)
+        updateVirtualKeyBudgetPayload(
             budgets: updates,
             resetUsage: resetUsage,
             calendarAligned: calendarAligned ?? virtualKey.calendarAligned,
@@ -932,7 +920,7 @@ final class BifrostClient: @unchecked Sendable {
         )
     }
 
-    private func updateCommonBudgetPayload(budgets: [BudgetUpdate], resetUsage: Bool, calendarAligned: Bool?, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
+    private func updateVirtualKeyBudgetPayload(budgets: [BudgetUpdate], resetUsage: Bool, calendarAligned: Bool?, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         let payload = BudgetUpdatePayload(
             budgets: budgets,
             resetBudgetUsage: resetUsage,
@@ -1048,10 +1036,6 @@ final class BifrostClient: @unchecked Sendable {
     }
 
     private func merging(budgets: [Budget], into virtualKey: VirtualKey) -> VirtualKey {
-        let commonBudgets = BudgetSnapshotMerger.refreshedBudgets(
-            existing: virtualKey.budgets,
-            fetched: budgets.filter { $0.virtualKeyID == virtualKey.id }
-        )
         let providerConfigs = virtualKey.providerConfigs.map { providerConfig in
             let providerBudgets = budgets.filter { $0.providerConfigID == providerConfig.id }
             return ProviderConfig(
@@ -1068,7 +1052,7 @@ final class BifrostClient: @unchecked Sendable {
         return VirtualKey(
             id: virtualKey.id,
             name: virtualKey.name,
-            budgets: commonBudgets,
+            budgets: virtualKey.budgets,
             providerConfigs: providerConfigs,
             calendarAligned: virtualKey.calendarAligned
         )
@@ -1119,14 +1103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let usageItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let resetDurationItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-    private let budgetActionsItem = NSMenuItem(title: "Budget Actions", action: nil, keyEquivalent: "")
-    private let resetItem = NSMenuItem(title: "Reset Now", action: #selector(resetBudgetUsage), keyEquivalent: "r")
-    private let raiseDefaultItem = NSMenuItem(title: "", action: #selector(raiseBudgetDefault), keyEquivalent: "+")
-    private let raiseCustomItem = NSMenuItem(title: "Raise Budget...", action: #selector(raiseBudgetCustom), keyEquivalent: "=")
+    private let resetItem = NSMenuItem(title: "Reset Usage", action: #selector(resetBudgetUsage), keyEquivalent: "r")
     private let budgetSettingsItem = NSMenuItem(title: "Budget Settings", action: nil, keyEquivalent: "")
     private let setBudgetLimitItem = NSMenuItem(title: "Set Budget Limit...", action: #selector(setSelectedBudgetLimit), keyEquivalent: "l")
-    private let budgetEnforcementItem = NSMenuItem(title: "", action: #selector(restoreSavedBudgetLimit), keyEquivalent: "")
-    private let setDefaultRaiseAmountItem = NSMenuItem(title: "Set Default Raise Amount...", action: #selector(setDefaultRaiseAmount), keyEquivalent: "d")
     private let calendarAlignedItem = NSMenuItem(title: "Calendar Aligned Resets", action: #selector(toggleCalendarAligned), keyEquivalent: "")
     private let virtualKeyItem = NSMenuItem(title: "Virtual Key", action: nil, keyEquivalent: "")
     private let displayedBudgetMenuItem = NSMenuItem(title: "Budget Window", action: nil, keyEquivalent: "")
@@ -1165,7 +1144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(resetDurationItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Refresh", action: #selector(refresh), keyEquivalent: "u"))
-        menu.addItem(budgetActionsMenu())
+        menu.addItem(resetItem)
         menu.addItem(budgetSettingsMenu())
         menu.addItem(.separator())
         menu.addItem(virtualKeyMenu())
@@ -1202,23 +1181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return virtualKeyItem
     }
 
-    private func budgetActionsMenu() -> NSMenuItem {
-        let submenu = NSMenu()
-        submenu.addItem(resetItem)
-        submenu.addItem(.separator())
-        submenu.addItem(raiseDefaultItem)
-        submenu.addItem(raiseCustomItem)
-        budgetActionsItem.submenu = submenu
-        return budgetActionsItem
-    }
-
     private func budgetSettingsMenu() -> NSMenuItem {
         let submenu = NSMenu()
         submenu.addItem(setBudgetLimitItem)
         submenu.addItem(displayedBudgetMenuItem)
-        submenu.addItem(budgetEnforcementItem)
-        submenu.addItem(.separator())
-        submenu.addItem(setDefaultRaiseAmountItem)
         submenu.addItem(.separator())
         submenu.addItem(budgetResetMenu())
         budgetSettingsItem.submenu = submenu
@@ -1267,33 +1233,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         performReset(interactive: true)
     }
 
-    @objc private func raiseBudgetDefault() {
-        raiseBudget(by: settings.defaultRaiseAmount)
-    }
-
-    @objc private func raiseBudgetCustom() {
-        guard let amount = promptDouble(
-            title: "Raise Budget",
-            message: "Enter the amount to add to the selected budget.",
-            defaultValue: settings.defaultRaiseAmount
-        ) else {
-            return
-        }
-        raiseBudget(by: amount)
-    }
-
-    @objc private func setDefaultRaiseAmount() {
-        guard let amount = promptDouble(
-            title: "Default Raise Amount",
-            message: "Enter the default amount used by Raise Budget.",
-            defaultValue: settings.defaultRaiseAmount
-        ) else {
-            return
-        }
-        settings.defaultRaiseAmount = amount
-        updateStaticMenuState()
-    }
-
     @objc private func setRefreshSeconds() {
         guard let value = promptString(
             title: "Refresh Period",
@@ -1302,7 +1241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) else {
             return
         }
-        guard let seconds = TimeInterval(value), seconds > 0 else {
+        guard let seconds = NumericInputValidator.positiveDouble(value) else {
             showAlert(title: "Invalid refresh interval", message: "Enter a positive number of seconds.")
             return
         }
@@ -1316,11 +1255,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showAlert(title: "Budget is not loaded", message: "Refresh Bifrost budget data before editing the limit.")
             return
         }
-        guard let maxLimit = promptDouble(
+        guard let value = promptString(
             title: "Set Budget Limit",
             message: "Enter the new max_limit for \(target.title).",
-            defaultValue: target.budget.maxLimit
+            defaultValue: String(format: "%.2f", target.budget.maxLimit)
         ) else {
+            return
+        }
+        guard let maxLimit = NumericInputValidator.positiveDouble(value) else {
+            showAlert(title: "Invalid budget limit", message: "Enter a positive finite number for max_limit.")
             return
         }
         setActionsEnabled(false)
@@ -1329,39 +1272,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.setActionsEnabled(true)
                 switch result {
                 case .success:
-                    self?.settings.setDisabledBudgetLimit(nil, forVirtualKeyID: virtualKey.id, budgetKey: target.key)
                     self?.refresh()
                 case .failure(let error):
                     self?.showAlert(title: "Budget update failed", message: error.localizedDescription)
-                    self?.refresh()
-                }
-            }
-        }
-    }
-
-    @objc private func restoreSavedBudgetLimit() {
-        guard let virtualKey = currentVirtualKey, let target = currentTarget else {
-            showAlert(title: "Budget is not loaded", message: "Refresh Bifrost budget data before restoring the limit.")
-            return
-        }
-        guard let savedLimit = settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key) else {
-            showAlert(
-                title: "No saved limit",
-                message: "bifrost-gauge no longer changes max_limit to allow over-budget requests. Configure Bifrost itself if you need a non-blocking over-budget policy."
-            )
-            return
-        }
-
-        setActionsEnabled(false)
-        client.setBudgetLimit(virtualKey: virtualKey, target: target, maxLimit: savedLimit) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.setActionsEnabled(true)
-                switch result {
-                case .success:
-                    self?.settings.setDisabledBudgetLimit(nil, forVirtualKeyID: virtualKey.id, budgetKey: target.key)
-                    self?.refresh()
-                case .failure(let error):
-                    self?.showAlert(title: "Budget limit restore failed", message: error.localizedDescription)
                     self?.refresh()
                 }
             }
@@ -1640,31 +1553,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return unit != "m" && unit != "h"
     }
 
-    private func raiseBudget(by amount: Double) {
-        guard amount > 0 else {
-            showAlert(title: "Invalid amount", message: "Budget raise amount must be greater than zero.")
-            return
-        }
-        guard let virtualKey = currentVirtualKey, let target = currentTarget else {
-            showAlert(title: "Budget is not loaded", message: "Refresh Bifrost budget data before raising the limit.")
-            return
-        }
-
-        setActionsEnabled(false)
-        client.raiseBudget(virtualKey: virtualKey, target: target, amount: amount) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.setActionsEnabled(true)
-                switch result {
-                case .success:
-                    self?.refresh()
-                case .failure(let error):
-                    self?.showAlert(title: "Raise failed", message: error.localizedDescription)
-                    self?.refresh()
-                }
-            }
-        }
-    }
-
     private func setLoading() {
         statusItem.length = NSStatusItem.variableLength
         statusItem.button?.image = nil
@@ -1685,9 +1573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateMenu(virtualKey: VirtualKey, target: BudgetTarget) {
         let budget = target.budget
-        let savedLimit = settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key)
-        let savedDisplayLimit = savedLimit.flatMap { $0 > 0 ? $0 : nil }
-        let displayMaxLimit = isLegacyHighWaterLimit(budget.maxLimit) ? (savedDisplayLimit ?? budget.maxLimit) : budget.maxLimit
+        let displayMaxLimit = budget.maxLimit
         let ratio = displayMaxLimit > 0 ? budget.currentUsage / displayMaxLimit : 0
         let percentage = min(999, ratio * 100)
         let remaining = max(0, displayMaxLimit - budget.currentUsage)
@@ -1779,11 +1665,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStaticMenuState() {
-        budgetActionsItem.title = "Budget Actions"
-        raiseDefaultItem.title = String(format: "Raise Budget by $%.2f", settings.defaultRaiseAmount)
         budgetSettingsItem.title = "Budget Settings"
         refreshIntervalItem.title = "Refresh Period: \(formatRefreshSeconds(settings.refreshSeconds))"
-        budgetEnforcementItem.title = budgetEnforcementDescription()
         resetDurationItem.title = resetDurationDescription()
         virtualKeyItem.title = "Virtual Key: \(virtualKeyDisplayName())"
         launchAtLoginItem.state = launchAgentInstalled() ? .on : .off
@@ -1847,27 +1730,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "Bifrost reset: \(target.budget.resetDuration) (\(alignment))"
     }
 
-    private func budgetEnforcementDescription() -> String {
-        guard let target = currentTarget, let virtualKey = currentVirtualKey else {
-            return "Restore Saved Budget Limit: Unavailable"
-        }
-        if hasSavedBudgetLimit(virtualKey: virtualKey, target: target) {
-            return "Restore Saved Budget Limit..."
-        }
-        return "Restore Saved Budget Limit: None"
-    }
-
-    private func hasSavedBudgetLimit(virtualKey: VirtualKey?, target: BudgetTarget?) -> Bool {
-        guard let virtualKey, let target else {
-            return false
-        }
-        return settings.disabledBudgetLimit(forVirtualKeyID: virtualKey.id, budgetKey: target.key) != nil
-    }
-
-    private func isLegacyHighWaterLimit(_ maxLimit: Double) -> Bool {
-        maxLimit >= AppSettings.legacyHighWaterBudgetLimit
-    }
-
     private func virtualKeyDisplayName() -> String {
         if let virtualKey = currentVirtualKey, let name = virtualKey.name, !name.isEmpty {
             return "\(name) (\(virtualKey.id))"
@@ -1918,12 +1780,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setActionsEnabled(_ enabled: Bool) {
         resetItem.isEnabled = enabled
-        raiseDefaultItem.isEnabled = enabled
-        raiseCustomItem.isEnabled = enabled
         setBudgetLimitItem.isEnabled = enabled && currentTarget != nil
         displayedBudgetMenuItem.isEnabled = enabled && currentVirtualKey != nil
-        budgetEnforcementItem.isEnabled = enabled && hasSavedBudgetLimit(virtualKey: currentVirtualKey, target: currentTarget)
-        setDefaultRaiseAmountItem.isEnabled = enabled
         calendarAlignedItem.isEnabled = enabled && currentTarget != nil
     }
 
@@ -1961,13 +1819,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         return field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func promptDouble(title: String, message: String, defaultValue: Double) -> Double? {
-        guard let value = promptString(title: title, message: message, defaultValue: String(format: "%.2f", defaultValue)) else {
-            return nil
-        }
-        return Double(value)
     }
 
     private func showAlert(title: String, message: String) {

@@ -200,6 +200,8 @@ cat > "$app_path/Contents/Info.plist" <<EOF
   <string>${version}</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
+  <key>LSMultipleInstancesProhibited</key>
+  <true/>
   <key>LSUIElement</key>
   <true/>
   <key>NSPrincipalClass</key>

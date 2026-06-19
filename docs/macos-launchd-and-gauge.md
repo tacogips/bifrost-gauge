@@ -103,20 +103,15 @@ BIFROST_BIN=/absolute/path/to/bifrost-http scripts/install-launchd.sh
 
 The app creates the directory and file automatically. Changes made through the
 menu bar app, including Bifrost URL changes, Virtual Key selection, budget
-window selection, display mode, budget usage refresh interval, default raise
-amount, and saved budget limit restore values, are written back to this
-JSON file. Budget reset timing remains Bifrost state and is not stored as local
-app cron state.
+window selection, display mode, and budget usage refresh interval, are written
+back to this JSON file. Budget reset timing remains Bifrost state and is not
+stored as local app cron state.
 
 Example:
 
 ```json
 {
   "baseURL": "http://127.0.0.1:18080",
-  "defaultRaiseAmount": 5,
-  "disabledBudgetLimits": {
-    "virtual-key:vk-personal": 10
-  },
   "menuBarDisplayMode": "pieAndPercent",
   "refreshSeconds": 10,
   "virtualKeyID": "vk-personal"
@@ -188,6 +183,12 @@ reset checks when fetching budget status. Bifrost `calendar_aligned` reset
 windows must be day, week, month, or year durations; use rolling alignment for
 minute or hour durations.
 
+The menu edits the budget set returned by
+`GET /api/governance/virtual-keys/{vk_id}`. The separate
+`GET /api/governance/budgets` index can include Virtual-Key-related budgets that
+the current Bifrost governance API exposes as read-only; those entries are not
+mixed into the editable menu state.
+
 ## Match Port Changes
 
 If Bifrost is moved to port `18081`, set both sides:
@@ -214,20 +215,3 @@ hard backstop that protects the upstream provider account.
 `bifrost-gauge` does not change a budget's `max_limit` to allow over-budget
 requests. The budget remains the budget. Configure Bifrost itself if you need a
 non-blocking over-budget policy.
-
-Older `bifrost-gauge` versions implemented a local workaround by raising
-`max_limit` to a high-water value and saving the original value in
-`disabledBudgetLimits`. Current versions only expose a restore action for those
-legacy entries:
-
-```text
-Restore Saved Budget Limit: None
-Restore Saved Budget Limit...
-Restore Saved Budget Limit: Unavailable
-```
-
-When a saved limit exists, choosing `Restore Saved Budget Limit...` sends that
-saved `max_limit` back through `PUT /api/governance/virtual-keys/{vk_id}` with
-`reset_budget_usage=false`, then removes the local saved value.
-`Unavailable` means the app has not loaded a Virtual Key budget yet, so the
-menu cannot decide which budget to update.
