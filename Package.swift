@@ -13,6 +13,11 @@ let package = Package(
         .executableTarget(
             name: "BifrostGauge",
             path: "Sources/BifrostGauge"
+        ),
+        .testTarget(
+            name: "BifrostGaugeTests",
+            dependencies: ["BifrostGauge"],
+            path: "Tests/BifrostGaugeTests"
         )
     ]
 )

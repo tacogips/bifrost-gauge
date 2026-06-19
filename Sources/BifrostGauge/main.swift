@@ -406,6 +406,7 @@ struct Budget: Decodable {
     let lastReset: String?
     let virtualKeyID: String?
     let providerConfigID: Int?
+    let modelConfigID: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -415,6 +416,31 @@ struct Budget: Decodable {
         case lastReset = "last_reset"
         case virtualKeyID = "virtual_key_id"
         case providerConfigID = "provider_config_id"
+        case modelConfigID = "model_config_id"
+    }
+
+    var isCommonScope: Bool {
+        providerConfigID == nil && modelConfigID == nil
+    }
+
+    init(
+        id: String?,
+        maxLimit: Double,
+        currentUsage: Double,
+        resetDuration: String,
+        lastReset: String?,
+        virtualKeyID: String?,
+        providerConfigID: Int?,
+        modelConfigID: String?
+    ) {
+        self.id = id
+        self.maxLimit = maxLimit
+        self.currentUsage = currentUsage
+        self.resetDuration = resetDuration
+        self.lastReset = lastReset
+        self.virtualKeyID = virtualKeyID
+        self.providerConfigID = providerConfigID
+        self.modelConfigID = modelConfigID
     }
 }
 
@@ -515,7 +541,7 @@ struct BudgetTarget {
     }
 }
 
-struct BudgetUpdate: Encodable {
+struct BudgetUpdate: Encodable, Equatable {
     let maxLimit: Double
     let resetDuration: String
 
@@ -525,7 +551,7 @@ struct BudgetUpdate: Encodable {
     }
 }
 
-struct ProviderConfigUpdate: Encodable {
+struct ProviderConfigUpdate: Encodable, Equatable {
     let id: Int?
     let provider: String
     let weight: Double?
@@ -545,7 +571,7 @@ struct ProviderConfigUpdate: Encodable {
     }
 }
 
-struct BudgetUpdatePayload: Encodable {
+struct BudgetUpdatePayload: Encodable, Equatable {
     let budgets: [BudgetUpdate]
     let resetBudgetUsage: Bool
     let calendarAligned: Bool?
@@ -557,7 +583,7 @@ struct BudgetUpdatePayload: Encodable {
     }
 }
 
-struct ProviderBudgetUpdatePayload: Encodable {
+struct ProviderBudgetUpdatePayload: Encodable, Equatable {
     let providerConfigs: [ProviderConfigUpdate]
     let resetBudgetUsage: Bool
     let calendarAligned: Bool?
@@ -566,6 +592,106 @@ struct ProviderBudgetUpdatePayload: Encodable {
         case providerConfigs = "provider_configs"
         case resetBudgetUsage = "reset_budget_usage"
         case calendarAligned = "calendar_aligned"
+    }
+}
+
+enum BudgetPayloadBuilder {
+    static func commonTargets(from virtualKey: VirtualKey) -> [BudgetTarget] {
+        commonBudgets(from: virtualKey).map { BudgetTarget(scope: .common, budget: $0) }
+    }
+
+    static func commonLimitUpdates(virtualKey: VirtualKey, target: BudgetTarget, maxLimit: Double) -> [BudgetUpdate] {
+        commonBudgets(from: virtualKey).map { budget in
+            BudgetUpdate(
+                maxLimit: budgetMatches(budget, target.budget) ? maxLimit : budget.maxLimit,
+                resetDuration: budget.resetDuration
+            )
+        }
+    }
+
+    static func commonResetDurationUpdates(virtualKey: VirtualKey, target: BudgetTarget, resetDuration: String) -> [BudgetUpdate] {
+        commonBudgets(from: virtualKey).map { budget in
+            BudgetUpdate(
+                maxLimit: budget.maxLimit,
+                resetDuration: budgetMatches(budget, target.budget) ? resetDuration : budget.resetDuration
+            )
+        }
+    }
+
+    static func resetDurationConflicts(virtualKey: VirtualKey, target: BudgetTarget, resetDuration: String) -> Bool {
+        commonBudgets(from: virtualKey).contains { budget in
+            !budgetMatches(budget, target.budget) && budget.resetDuration == resetDuration
+        }
+    }
+
+    static func commonUpdates(from budgets: [Budget]) -> [BudgetUpdate] {
+        uniqueBudgetsByResetDuration(budgets).map {
+            BudgetUpdate(maxLimit: $0.maxLimit, resetDuration: $0.resetDuration)
+        }
+    }
+
+    static func providerConfigUpdates(
+        virtualKey: VirtualKey,
+        provider: String,
+        transform: ([BudgetUpdate]) -> [BudgetUpdate]
+    ) -> [ProviderConfigUpdate] {
+        virtualKey.providerConfigs.map { providerConfig in
+            let currentBudgets = providerConfig.budgets.map {
+                BudgetUpdate(maxLimit: $0.maxLimit, resetDuration: $0.resetDuration)
+            }
+            return ProviderConfigUpdate(
+                id: providerConfig.id,
+                provider: providerConfig.provider,
+                weight: providerConfig.weight,
+                allowedModels: providerConfig.allowedModels,
+                blacklistedModels: providerConfig.blacklistedModels,
+                keyIDs: providerConfig.allowAllKeys ? ["*"] : providerConfig.keys.map(\.keyID),
+                budgets: providerConfig.provider == provider ? transform(currentBudgets) : currentBudgets
+            )
+        }
+    }
+
+    static func providerBudgetUpdates(
+        budgets: [BudgetUpdate],
+        maxLimit: Double,
+        resetDuration: String
+    ) -> [BudgetUpdate] {
+        var updates = uniqueBudgetUpdatesByResetDuration(budgets)
+        if let index = updates.firstIndex(where: { $0.resetDuration == resetDuration }) {
+            updates[index] = BudgetUpdate(maxLimit: maxLimit, resetDuration: resetDuration)
+        } else {
+            updates.append(BudgetUpdate(maxLimit: maxLimit, resetDuration: resetDuration))
+        }
+        return updates
+    }
+
+    static func budgetMatches(_ left: Budget, _ right: Budget) -> Bool {
+        if let leftID = left.id, let rightID = right.id {
+            return leftID == rightID
+        }
+        return left.resetDuration == right.resetDuration
+    }
+
+    static func uniqueBudgetsByResetDuration(_ budgets: [Budget]) -> [Budget] {
+        budgets.reduce(into: [Budget]()) { partial, budget in
+            guard !partial.contains(where: { $0.resetDuration == budget.resetDuration }) else {
+                return
+            }
+            partial.append(budget)
+        }
+    }
+
+    private static func commonBudgets(from virtualKey: VirtualKey) -> [Budget] {
+        uniqueBudgetsByResetDuration(virtualKey.budgets.filter(\.isCommonScope))
+    }
+
+    private static func uniqueBudgetUpdatesByResetDuration(_ budgets: [BudgetUpdate]) -> [BudgetUpdate] {
+        budgets.reduce(into: [BudgetUpdate]()) { partial, budget in
+            guard !partial.contains(where: { $0.resetDuration == budget.resetDuration }) else {
+                return
+            }
+            partial.append(budget)
+        }
     }
 }
 
@@ -667,7 +793,7 @@ final class BifrostClient: @unchecked Sendable {
     func resetBudgetUsage(virtualKey: VirtualKey, target: BudgetTarget, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         switch target.scope {
         case .common:
-            updateCommonBudgets(virtualKey: virtualKey, budgets: virtualKey.budgets, resetUsage: true, completion: completion)
+            updateCommonBudgets(virtualKey: virtualKey, budgets: commonBudgets(from: virtualKey), resetUsage: true, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { $0 }, resetUsage: true, completion: completion)
         }
@@ -680,10 +806,7 @@ final class BifrostClient: @unchecked Sendable {
     func setBudgetLimit(virtualKey: VirtualKey, target: BudgetTarget, maxLimit: Double, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         switch target.scope {
         case .common:
-            let updates = virtualKey.budgets.map { budget -> BudgetUpdate in
-                let shouldUpdate = budgetMatches(budget, target.budget)
-                return BudgetUpdate(maxLimit: shouldUpdate ? maxLimit : budget.maxLimit, resetDuration: budget.resetDuration)
-            }
+            let updates = BudgetPayloadBuilder.commonLimitUpdates(virtualKey: virtualKey, target: target, maxLimit: maxLimit)
             updateCommonBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { budgets in
@@ -698,13 +821,7 @@ final class BifrostClient: @unchecked Sendable {
     func setBudgetResetDuration(virtualKey: VirtualKey, target: BudgetTarget, resetDuration: String, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         switch target.scope {
         case .common:
-            let updates = virtualKey.budgets.map { budget -> BudgetUpdate in
-                let shouldUpdate = budgetMatches(budget, target.budget)
-                return BudgetUpdate(
-                    maxLimit: budget.maxLimit,
-                    resetDuration: shouldUpdate ? resetDuration : budget.resetDuration
-                )
-            }
+            let updates = BudgetPayloadBuilder.commonResetDurationUpdates(virtualKey: virtualKey, target: target, resetDuration: resetDuration)
             updateCommonBudgetPayload(budgets: updates, resetUsage: false, calendarAligned: virtualKey.calendarAligned, completion: completion)
         case .provider(let provider):
             updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { budgets in
@@ -724,7 +841,7 @@ final class BifrostClient: @unchecked Sendable {
         case .common:
             updateCommonBudgets(
                 virtualKey: virtualKey,
-                budgets: virtualKey.budgets,
+                budgets: commonBudgets(from: virtualKey),
                 resetUsage: false,
                 calendarAligned: calendarAligned,
                 completion: completion
@@ -743,13 +860,7 @@ final class BifrostClient: @unchecked Sendable {
 
     func addVendorBudget(virtualKey: VirtualKey, provider: String, maxLimit: Double, resetDuration: String, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
         updateProviderBudgets(virtualKey: virtualKey, provider: provider, transform: { budgets in
-            var updates = budgets
-            if let index = updates.firstIndex(where: { $0.resetDuration == resetDuration }) {
-                updates[index] = BudgetUpdate(maxLimit: maxLimit, resetDuration: resetDuration)
-            } else {
-                updates.append(BudgetUpdate(maxLimit: maxLimit, resetDuration: resetDuration))
-            }
-            return updates
+            BudgetPayloadBuilder.providerBudgetUpdates(budgets: budgets, maxLimit: maxLimit, resetDuration: resetDuration)
         }, resetUsage: false, completion: completion)
     }
 
@@ -768,7 +879,11 @@ final class BifrostClient: @unchecked Sendable {
     }
 
     func budgetTargets(from virtualKey: VirtualKey) -> [BudgetTarget] {
-        virtualKey.budgets.map { BudgetTarget(scope: .common, budget: $0) }
+        BudgetPayloadBuilder.commonTargets(from: virtualKey)
+    }
+
+    private func commonBudgets(from virtualKey: VirtualKey) -> [Budget] {
+        BudgetPayloadBuilder.commonTargets(from: virtualKey).map(\.budget)
     }
 
     private func updateCommonBudgets(
@@ -778,9 +893,7 @@ final class BifrostClient: @unchecked Sendable {
         calendarAligned: Bool? = nil,
         completion: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
-        let updates = budgets.map {
-            BudgetUpdate(maxLimit: $0.maxLimit, resetDuration: $0.resetDuration)
-        }
+        let updates = BudgetPayloadBuilder.commonUpdates(from: budgets)
         updateCommonBudgetPayload(
             budgets: updates,
             resetUsage: resetUsage,
@@ -831,20 +944,7 @@ final class BifrostClient: @unchecked Sendable {
         calendarAligned: Bool? = nil,
         completion: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
-        let updates = virtualKey.providerConfigs.map { providerConfig -> ProviderConfigUpdate in
-            let currentBudgets = providerConfig.budgets.map {
-                BudgetUpdate(maxLimit: $0.maxLimit, resetDuration: $0.resetDuration)
-            }
-            return ProviderConfigUpdate(
-                id: providerConfig.id,
-                provider: providerConfig.provider,
-                weight: providerConfig.weight,
-                allowedModels: providerConfig.allowedModels,
-                blacklistedModels: providerConfig.blacklistedModels,
-                keyIDs: providerConfig.allowAllKeys ? ["*"] : providerConfig.keys.map(\.keyID),
-                budgets: providerConfig.provider == provider ? transform(currentBudgets) : currentBudgets
-            )
-        }
+        let updates = BudgetPayloadBuilder.providerConfigUpdates(virtualKey: virtualKey, provider: provider, transform: transform)
         updateProviderBudgetPayload(
             providerConfigs: updates,
             resetUsage: resetUsage,
@@ -963,7 +1063,8 @@ final class BifrostClient: @unchecked Sendable {
                 resetDuration: budget.resetDuration,
                 lastReset: latest.lastReset ?? budget.lastReset,
                 virtualKeyID: latest.virtualKeyID ?? budget.virtualKeyID,
-                providerConfigID: latest.providerConfigID ?? budget.providerConfigID
+                providerConfigID: latest.providerConfigID ?? budget.providerConfigID,
+                modelConfigID: latest.modelConfigID ?? budget.modelConfigID
             )
         }
         return mergedBudgets(existing: refreshed, additional: fetched)
@@ -1510,6 +1611,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showAlert(
                 title: "Reset duration needs rolling alignment",
                 message: "Turn off Calendar Aligned Resets before using minute or hour reset durations. Bifrost calendar_aligned supports day, week, month, and year windows."
+            )
+            return
+        }
+        guard !BudgetPayloadBuilder.resetDurationConflicts(virtualKey: virtualKey, target: target, resetDuration: resetDuration) else {
+            showAlert(
+                title: "Reset duration already exists",
+                message: "Choose the existing \(resetDuration) budget window instead of changing this budget to a duplicate reset duration."
             )
             return
         }
