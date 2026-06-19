@@ -76,6 +76,7 @@ Click the menu bar item to:
 - switch menu bar display between any combination of percent, pie, and spend amount
 - set the automatic refresh period from Bifrost Settings
 - edit the Bifrost base URL from Bifrost Settings
+- view the app version and active Bifrost connection details from About Bifrost
 - toggle "Launch at Login"; the app writes or removes its own LaunchAgent
 
 Bifrost owns reset scheduling. `bifrost-gauge` updates each budget's

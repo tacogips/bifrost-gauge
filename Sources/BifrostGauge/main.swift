@@ -70,6 +70,24 @@ enum MenuBarDisplayMode: String, CaseIterable {
     }
 }
 
+struct AppMetadata {
+    static var versionDescription: String {
+        let version = bundleValue(for: "CFBundleShortVersionString") ?? "development"
+        guard let build = bundleValue(for: "CFBundleVersion"), build != version else {
+            return version
+        }
+        return "\(version) (\(build))"
+    }
+
+    private static func bundleValue(for key: String) -> String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 struct AppConfig {
     static let defaultRefreshSeconds: TimeInterval = 10
     static let minimumRefreshSeconds: TimeInterval = 10
@@ -1001,6 +1019,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let budgetResetItem = NSMenuItem(title: "Bifrost Budget Reset", action: nil, keyEquivalent: "")
     private let menuBarDisplayItem = NSMenuItem(title: "Menu Bar Display", action: nil, keyEquivalent: "")
     private let refreshIntervalItem = NSMenuItem(title: "", action: #selector(setRefreshSeconds), keyEquivalent: "")
+    private let aboutItem = NSMenuItem(title: "About Bifrost...", action: #selector(showAboutBifrost), keyEquivalent: "")
     private var timer: Timer?
     private var registeredVirtualKeys: [VirtualKey] = []
     private var currentVirtualKey: VirtualKey?
@@ -1041,6 +1060,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(settingsMenu())
         menu.addItem(launchAtLoginItem)
         menu.addItem(.separator())
+        menu.addItem(aboutItem)
         menu.addItem(NSMenuItem(title: "Open Bifrost", action: #selector(openBifrost), keyEquivalent: "o"))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
         updateMenuTargets(menu)
@@ -1363,6 +1383,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openBifrost() {
         NSWorkspace.shared.open(settings.baseURL)
+    }
+
+    @objc private func showAboutBifrost() {
+        let alert = NSAlert()
+        alert.messageText = "About Bifrost"
+        alert.informativeText = [
+            "App: bifrost-gauge",
+            "Version: \(AppMetadata.versionDescription)",
+            "Bifrost URL: \(settings.baseURL.absoluteString)",
+            "Virtual Key: \(virtualKeyDisplayName())",
+            "Budget Window: \(currentTarget?.title ?? "Unavailable")",
+            "Menu Bar Display: \(settings.menuBarDisplayMode.title)",
+            "Refresh Period: \(formatRefreshSeconds(settings.refreshSeconds))"
+        ].joined(separator: "\n")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func quit() {
